@@ -1,0 +1,21 @@
+{
+  "name": "stremio-dual-subtitles",
+  "version": "1.0.0",
+  "description": "Stremio addon for dual subtitles",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "stremio",
+    "addon",
+    "subtitles",
+    "dual-subtitles"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10"
+  }
+}
