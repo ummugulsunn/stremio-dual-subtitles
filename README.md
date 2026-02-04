@@ -28,10 +28,9 @@ Click the link to configure and install the addon instantly!
 
 ## 📸 How It Looks
 
-```
-[English subtitle line here]
-[Türkçe altyazı burada]
-```
+![Dual Subtitles Demo](public/demo.png)
+
+*English on top, Turkish translation below in italics - watch and learn simultaneously!*
 
 The primary language appears normally, while the secondary language appears in italics below.
 
