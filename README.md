@@ -1,25 +1,181 @@
 # Stremio Dual Subtitles Addon
 
-A Stremio addon designed to provide dual subtitles (e.g., displaying two languages simultaneously).
+A Stremio addon that displays **two subtitle languages simultaneously** - perfect for language learners! Watch your favorite movies and series with both the original language and your native language subtitles.
 
-## Features
-- **Dual Subtitles**: View subtitles in two languages at once.
-- **Customizable**: (Planned) Select which languages to display.
+![Language Learning](https://img.shields.io/badge/Language-Learning-blue)
+![Stremio](https://img.shields.io/badge/Stremio-Addon-purple)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## Installation
+## ✨ Features
 
-1. Clone the repository.
-2. Run `npm install` to install dependencies.
-3. Run `npm start` to start the addon server.
-4. Load the addon in Stremio using the provided URL (default: `http://localhost:7000/manifest.json`).
+- **Dual Subtitles**: See two languages at once - primary on top, secondary below
+- **70+ Languages**: Support for all major languages from OpenSubtitles
+- **Smart Merging**: Intelligent time-based subtitle synchronization
+- **Auto-Detection**: Automatically detects your browser language
+- **Modern UI**: Beautiful configuration interface
+- **In-Memory Caching**: Fast subtitle delivery with 6-hour cache
+- **Multiple Encodings**: Handles UTF-8, UTF-16, legacy codepages, and more
+- **Free & Open Source**: No API keys required, completely free to use
 
-## Development
+## 📸 How It Looks
 
-This project uses the `stremio-addon-sdk`.
+```
+[English subtitle line here]
+[Türkçe altyazı burada]
+```
 
-### structure
-- `addon.js`: Contains the addon manifest and logic.
-- `server.js`: Entry point to run the addon server.
+The primary language appears normally, while the secondary language appears in italics below.
 
-## License
-MIT
+## 🚀 Quick Start
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) v16 or higher
+- [Stremio](https://www.stremio.com/) installed on your device
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/stremio-dual-subtitles.git
+   cd stremio-dual-subtitles
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Start the server:**
+   ```bash
+   npm start
+   ```
+
+4. **Configure the addon:**
+   - Open your browser and go to `http://localhost:7000/configure`
+   - Select your primary language (the one you're learning)
+   - Select your secondary language (your native language)
+   - Click "Install Addon"
+
+5. **Enjoy!**
+   - Open Stremio and play any movie or series
+   - Select the dual subtitle option from the subtitle menu
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and customize:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `7000` | Server port |
+| `HOST` | `0.0.0.0` | Host to bind to |
+| `EXTERNAL_URL` | auto | External URL for remote access |
+| `ADDON_NAME` | `Dual Subtitles` | Custom addon name |
+
+### Remote Access
+
+To use on other devices in your network:
+
+1. Find your computer's IP address (e.g., `192.168.1.100`)
+2. Set `EXTERNAL_URL=http://192.168.1.100:7000` in `.env`
+3. Open `http://192.168.1.100:7000/configure` on your other device
+
+## 🎯 Usage Tips
+
+### For Language Learning
+
+1. **Choose wisely**: Set the language you're learning as PRIMARY (top)
+2. **Reading practice**: Try to read the primary subtitle first
+3. **Check understanding**: Glance at the secondary subtitle when needed
+4. **Repeat**: Pause and repeat difficult scenes
+
+### Best Content for Learning
+
+- **TV Series**: Consistent dialogue, recurring vocabulary
+- **Animated films**: Clear pronunciation, slower speech
+- **Rom-coms**: Everyday conversational language
+- **Documentaries**: Formal/educational vocabulary
+
+## 🏗️ Project Structure
+
+```
+stremio-dual-subtitles/
+├── addon.js          # Main addon logic (fetching, merging)
+├── server.js         # Express server and routing
+├── encoding.js       # Character encoding detection
+├── languages.js      # Language maps and utilities
+├── landingTemplate.js # Configuration page HTML
+├── package.json      # Dependencies
+├── .env.example      # Environment variables template
+└── README.md         # This file
+```
+
+## 🔧 Technical Details
+
+### Subtitle Sources
+
+- **OpenSubtitles**: Primary source via Stremio's proxy API
+- Subtitles are fetched, decoded, and merged in real-time
+
+### Encoding Support
+
+The addon handles various encodings including:
+- UTF-8, UTF-16 LE/BE (with BOM detection)
+- Windows codepages (1250-1258)
+- ISO-8859 variants
+- Double-encoded UTF-8 text
+
+### Caching
+
+- Merged subtitles are cached in memory for 6 hours
+- No external storage required
+- Cache is cleared on server restart
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Credits
+
+- Inspired by [Strelingo Addon](https://github.com/Serkali-sudo/strelingo-addon)
+- Subtitles provided by [OpenSubtitles](https://www.opensubtitles.org/)
+- Built with [Stremio Addon SDK](https://github.com/Stremio/stremio-addon-sdk)
+
+## 🐛 Troubleshooting
+
+### Subtitles not showing?
+
+1. Make sure both languages are available for that movie/series
+2. Try a different movie - not all content has subtitles
+3. Check the server console for error messages
+
+### Wrong encoding/garbled text?
+
+The addon tries to auto-detect encoding, but some rare files may have issues. 
+Please report these with the movie/series title.
+
+### Can't connect from other devices?
+
+1. Check your firewall settings
+2. Ensure `EXTERNAL_URL` is set correctly
+3. Use your local IP address, not `localhost`
+
+---
+
+**Happy learning! 🎬📚**
