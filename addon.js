@@ -547,13 +547,25 @@ async function subtitlesHandler({ type, id, extra, config }) {
       const mergedSrt = formatSrt(merged);
       if (!mergedSrt) continue;
 
-      // Store in cache
+      // Store in cache (for local/backup)
       const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v${version}`;
       storeSubtitle(cacheKey, mergedSrt);
 
+      // Use dynamic URL that regenerates subtitle on each request (for serverless)
+      const dynamicParams = [
+        type,
+        imdbId,
+        season || '0',
+        episode || '0',
+        mainLang,
+        transLang,
+        selectedMainSub.id,
+        transSubInfo.id
+      ].join('/');
+
       finalSubtitles.push({
         id: `dual-${selectedMainSub.id}-${transSubInfo.id}-v${version}`,
-        url: `{{ADDON_URL}}/subtitles/${encodeURIComponent(cacheKey)}.srt`,
+        url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
         lang: `${mainLang}+${transLang}`,
         SubtitlesName: `🌍 ${getLanguageName(mainLang)} + ${getLanguageName(transLang)} (v${version})`
       });
@@ -575,10 +587,95 @@ async function subtitlesHandler({ type, id, extra, config }) {
 // Register the handler with the builder
 builder.defineSubtitlesHandler(subtitlesHandler);
 
+/**
+ * Generate merged subtitle dynamically (for serverless environments)
+ * Called directly by URL - no cache dependency
+ */
+async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId) {
+  debugServer.log('Dynamic subtitle generation:', { type, imdbId, mainLang, transLang });
+
+  try {
+    // Fetch all subtitles
+    const allSubtitles = await fetchAllSubtitles(
+      imdbId, 
+      type, 
+      season !== '0' ? season : null, 
+      episode !== '0' ? episode : null
+    );
+
+    if (!allSubtitles) {
+      debugServer.warn('No subtitles found');
+      return null;
+    }
+
+    // Find the specific subtitle files by ID
+    const mainSubInfo = allSubtitles.find(s => String(s.id) === String(mainSubId));
+    const transSubInfo = allSubtitles.find(s => String(s.id) === String(transSubId));
+
+    if (!mainSubInfo || !transSubInfo) {
+      debugServer.warn('Specific subtitles not found, trying by language');
+      // Fallback: get best match by language
+      const mainSubList = filterSubtitlesByLanguage(allSubtitles, mainLang);
+      const transSubList = filterSubtitlesByLanguage(allSubtitles, transLang);
+      
+      if (!mainSubList || !transSubList) {
+        return null;
+      }
+
+      // Use first available
+      const mainContent = await fetchSubtitleContent(mainSubList[0].url, mainLang);
+      const transContent = await fetchSubtitleContent(transSubList[0].url, transLang);
+
+      if (!mainContent || !transContent) return null;
+
+      const mainParsed = parseSrt(mainContent);
+      const transParsed = parseSrt(transContent);
+
+      if (!mainParsed || !transParsed) return null;
+
+      const merged = mergeSubtitles(mainParsed, transParsed);
+      return formatSrt(merged);
+    }
+
+    // Fetch and parse both subtitle files
+    const mainContent = await fetchSubtitleContent(mainSubInfo.url, mainLang);
+    const transContent = await fetchSubtitleContent(transSubInfo.url, transLang);
+
+    if (!mainContent || !transContent) {
+      debugServer.warn('Could not fetch subtitle content');
+      return null;
+    }
+
+    const mainParsed = parseSrt(mainContent);
+    const transParsed = parseSrt(transContent);
+
+    if (!mainParsed || !transParsed || mainParsed.length === 0 || transParsed.length === 0) {
+      debugServer.warn('Could not parse subtitles');
+      return null;
+    }
+
+    // Merge subtitles
+    const merged = mergeSubtitles(mainParsed, transParsed);
+    if (!merged || merged.length === 0) {
+      debugServer.warn('Merge failed');
+      return null;
+    }
+
+    const srtContent = formatSrt(merged);
+    debugServer.log(`Generated ${merged.length} merged subtitle entries`);
+    
+    return srtContent;
+  } catch (error) {
+    debugServer.error('Error generating dynamic subtitle:', sanitizeForLogging(error.message));
+    return null;
+  }
+}
+
 module.exports = {
   builder,
   manifest,
   getSubtitle,
   subtitleCache,
-  subtitlesHandler
+  subtitlesHandler,
+  generateDynamicSubtitle
 };

@@ -18,7 +18,7 @@ const {
   getAnalyticsSummary 
 } = require('./lib/analytics');
 const { generateStatsHTML, generatePrivacyHTML, generateErrorHTML } = require('./lib/templates');
-const { builder, manifest, getSubtitle, subtitlesHandler } = require('./addon');
+const { builder, manifest, getSubtitle, subtitlesHandler, generateDynamicSubtitle } = require('./addon');
 const generateLandingHTML = require('./landingTemplate');
 const { parseLangCode } = require('./languages');
 
@@ -212,7 +212,7 @@ app.get('/privacy', (req, res) => {
 // STREMIO ADDON ROUTES
 // ============================================================================
 
-// Serve cached subtitles
+// Serve cached subtitles (legacy/backup)
 app.get('/subtitles/:filename', (req, res) => {
   const filename = req.params.filename;
   const cacheKey = filename.replace('.srt', '');
@@ -230,6 +230,35 @@ app.get('/subtitles/:filename', (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=21600');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   res.send(content);
+});
+
+// Dynamic subtitle generation (serverless-compatible)
+// URL format: /subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:transSubId.srt
+app.get('/subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:transSubId.srt', async (req, res) => {
+  const { type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId } = req.params;
+  
+  debugServer.log(`Dynamic subtitle request: ${type}/${imdbId} ${mainLang}+${transLang}`);
+  
+  try {
+    const content = await generateDynamicSubtitle(
+      type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId
+    );
+    
+    if (!content) {
+      debugServer.warn('Could not generate dynamic subtitle');
+      return res.status(404).send('Subtitle generation failed');
+    }
+    
+    trackSubtitleServed();
+    
+    res.setHeader('Content-Type', 'text/srt; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Disposition', `inline; filename="dual_${mainLang}_${transLang}.srt"`);
+    res.send(content);
+  } catch (error) {
+    debugServer.error('Dynamic subtitle error:', error.message);
+    res.status(500).send('Internal server error');
+  }
 });
 
 // Configuration-specific configure page (redirect to main configure)
