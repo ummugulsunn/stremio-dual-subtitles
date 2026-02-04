@@ -2,13 +2,22 @@
 
 /**
  * Stremio Dual Subtitles Addon Server
- * Serves the addon with configuration support and subtitle caching.
+ * Serves the addon with configuration support, analytics, and subtitle caching.
  */
 
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 const { getRouter } = require('stremio-addon-sdk');
 const { debugServer, sanitizeForLogging } = require('./lib/debug');
+const { 
+  trackPageView, 
+  trackInstall, 
+  trackSubtitleRequest, 
+  trackSubtitleServed,
+  getAnalyticsSummary 
+} = require('./lib/analytics');
+const { generateStatsHTML, generatePrivacyHTML, generateErrorHTML } = require('./lib/templates');
 const { builder, manifest, getSubtitle, subtitlesHandler } = require('./addon');
 const generateLandingHTML = require('./landingTemplate');
 const { parseLangCode } = require('./languages');
@@ -27,14 +36,37 @@ function getExternalUrl(req) {
   return `${protocol}://${host}`;
 }
 
+// Get client IP
+function getClientIP(req) {
+  return (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+    .toString()
+    .split(',')[0]
+    .trim();
+}
+
+// Get manifest with full logo URL
+function getManifestWithLogo(req) {
+  const baseUrl = getExternalUrl(req);
+  return {
+    ...manifest,
+    logo: manifest.logo.startsWith('http') ? manifest.logo : `${baseUrl}${manifest.logo}`
+  };
+}
+
 // Create Express app
 const app = express();
+
+// Gzip compression
+app.use(compression());
+
+// JSON body parser for API endpoints
+app.use(express.json());
 
 // CORS middleware
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -51,8 +83,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files with caching
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1d',
+  etag: true
+}));
 
 // Basic rate limiter (per IP)
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
@@ -60,10 +95,12 @@ const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 60);
 const rateLimitStore = new Map();
 
 app.use((req, res, next) => {
-  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
-    .toString()
-    .split(',')[0]
-    .trim();
+  // Skip rate limiting for static files and health check
+  if (req.path.startsWith('/logo') || req.path === '/health') {
+    return next();
+  }
+  
+  const ip = getClientIP(req);
   const now = Date.now();
 
   if (!rateLimitStore.has(ip)) {
@@ -79,7 +116,9 @@ app.use((req, res, next) => {
   }
 
   if (entry.count >= RATE_LIMIT_MAX) {
-    res.status(429).json({ error: 'Too many requests' });
+    const baseUrl = getExternalUrl(req);
+    const manifestWithLogo = getManifestWithLogo(req);
+    res.status(429).send(generateErrorHTML(429, 'Too many requests', baseUrl, manifestWithLogo));
     return;
   }
 
@@ -87,10 +126,82 @@ app.use((req, res, next) => {
   next();
 });
 
+// ============================================================================
+// API ENDPOINTS
+// ============================================================================
+
+// Analytics tracking endpoint
+app.post('/api/track', (req, res) => {
+  try {
+    const { event, page, mainLang, transLang, contentType } = req.body;
+    const ip = getClientIP(req);
+    
+    switch (event) {
+      case 'pageView':
+        trackPageView(ip, page);
+        break;
+      case 'install':
+        trackInstall(ip, mainLang, transLang);
+        break;
+      case 'subtitleRequest':
+        trackSubtitleRequest(mainLang, transLang, contentType);
+        break;
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.json({ success: false });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: manifest.version });
+  res.json({ 
+    status: 'ok', 
+    version: manifest.version,
+    uptime: process.uptime()
+  });
 });
+
+// ============================================================================
+// PAGE ROUTES
+// ============================================================================
+
+// Landing/configuration page
+app.get('/', (req, res) => {
+  res.redirect('/configure');
+});
+
+app.get('/configure', (req, res) => {
+  const baseUrl = getExternalUrl(req);
+  const manifestWithLogo = getManifestWithLogo(req);
+  const html = generateLandingHTML(manifestWithLogo, baseUrl);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
+// Analytics dashboard
+app.get('/stats', (req, res) => {
+  const baseUrl = getExternalUrl(req);
+  const manifestWithLogo = getManifestWithLogo(req);
+  const stats = getAnalyticsSummary();
+  const html = generateStatsHTML(stats, baseUrl, manifestWithLogo);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
+// Privacy policy
+app.get('/privacy', (req, res) => {
+  const baseUrl = getExternalUrl(req);
+  const manifestWithLogo = getManifestWithLogo(req);
+  const html = generatePrivacyHTML(baseUrl, manifestWithLogo);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
+// ============================================================================
+// STREMIO ADDON ROUTES
+// ============================================================================
 
 // Serve cached subtitles
 app.get('/subtitles/:filename', (req, res) => {
@@ -104,26 +215,12 @@ app.get('/subtitles/:filename', (req, res) => {
     return res.status(404).send('Subtitle not found or expired');
   }
   
+  trackSubtitleServed();
+  
   res.setHeader('Content-Type', 'text/srt; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=21600');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   res.send(content);
-});
-
-// Landing/configuration page
-app.get('/', (req, res) => {
-  res.redirect('/configure');
-});
-
-app.get('/configure', (req, res) => {
-  const baseUrl = getExternalUrl(req);
-  const manifestWithLogo = {
-    ...manifest,
-    logo: manifest.logo.startsWith('http') ? manifest.logo : `${baseUrl}${manifest.logo}`
-  };
-  const html = generateLandingHTML(manifestWithLogo, baseUrl);
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(html);
 });
 
 // Configuration-specific configure page (redirect to main configure)
@@ -143,7 +240,6 @@ app.get('/:config/manifest.json', (req, res) => {
 
     const mainCode = parseLangCode(mainLang);
     const transCode = parseLangCode(transLang);
-
     const baseUrl = getExternalUrl(req);
 
     // Create configured manifest
@@ -183,6 +279,9 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
       mainLang,
       transLang
     };
+
+    // Track subtitle request
+    trackSubtitleRequest(parseLangCode(mainLang), parseLangCode(transLang), type);
 
     debugServer.log(`Subtitle request: ${type}/${id}, langs: ${parseLangCode(mainLang)}+${parseLangCode(transLang)}`);
 
@@ -236,11 +335,7 @@ function parseExtra(extraStr) {
 
 // Default manifest (without config - redirects to configure)
 app.get('/manifest.json', (req, res) => {
-  const baseUrl = getExternalUrl(req);
-  const manifestWithLogo = {
-    ...manifest,
-    logo: manifest.logo.startsWith('http') ? manifest.logo : `${baseUrl}${manifest.logo}`
-  };
+  const manifestWithLogo = getManifestWithLogo(req);
   res.json(manifestWithLogo);
 });
 
@@ -248,11 +343,28 @@ app.get('/manifest.json', (req, res) => {
 const addonInterface = builder.getInterface();
 app.use(getRouter(addonInterface));
 
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+// 404 handler
+app.use((req, res) => {
+  const baseUrl = getExternalUrl(req);
+  const manifestWithLogo = getManifestWithLogo(req);
+  res.status(404).send(generateErrorHTML(404, 'Page not found', baseUrl, manifestWithLogo));
+});
+
 // Error handling
 app.use((err, req, res, next) => {
   debugServer.error('Server error:', sanitizeForLogging(err && err.message ? err.message : err));
-  res.status(500).json({ error: 'Internal server error' });
+  const baseUrl = getExternalUrl(req);
+  const manifestWithLogo = getManifestWithLogo(req);
+  res.status(500).send(generateErrorHTML(500, 'Internal server error', baseUrl, manifestWithLogo));
 });
+
+// ============================================================================
+// SERVER STARTUP
+// ============================================================================
 
 // Start server only if not running on Vercel (Vercel handles this automatically)
 if (!process.env.VERCEL) {
@@ -261,6 +373,7 @@ if (!process.env.VERCEL) {
     debugServer.log(`Local: http://localhost:${PORT}/configure`);
     debugServer.log(`Network: http://${HOST === '0.0.0.0' ? '<your-ip>' : HOST}:${PORT}/configure`);
     debugServer.log(`Manifest: http://localhost:${PORT}/manifest.json`);
+    debugServer.log(`Analytics: http://localhost:${PORT}/stats`);
   });
 }
 

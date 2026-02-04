@@ -1,0 +1,93 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Check for syntax errors
+        run: node --check server.js && node --check addon.js
+      
+      - name: Start server and test health endpoint
+        run: |
+          node server.js &
+          sleep 3
+          curl -f http://localhost:7000/health || exit 1
+          curl -f http://localhost:7000/manifest.json || exit 1
+          pkill -f "node server.js" || true
+
+  security-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm audit
+        run: npm audit --audit-level=high || true
+      
+      - name: Check for hardcoded secrets
+        run: |
+          # Check for common secret patterns
+          if grep -rE "(api_key|apikey|secret|password|token)\s*[=:]\s*['\"][^'\"]+['\"]" --include="*.js" --exclude-dir=node_modules .; then
+            echo "Warning: Potential hardcoded secrets found"
+          fi
+
+  deploy-check:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Verify Vercel configuration
+        run: |
+          if [ -f "vercel.json" ]; then
+            echo "Vercel configuration found"
+            cat vercel.json
+          else
+            echo "Warning: vercel.json not found"
+          fi
+      
+      - name: Check required files
+        run: |
+          required_files=("server.js" "addon.js" "package.json" "vercel.json")
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Error: Required file $file not found"
+              exit 1
+            fi
+          done
+          echo "All required files present"

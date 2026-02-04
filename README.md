@@ -18,9 +18,12 @@ Click the link to configure and install the addon instantly!
 - **70+ Languages**: Support for all major languages from OpenSubtitles
 - **Smart Merging**: Intelligent time-based subtitle synchronization
 - **Auto-Detection**: Automatically detects your browser language
-- **Modern UI**: Beautiful configuration interface
+- **Modern UI**: Beautiful animated landing page with smooth interactions
+- **Analytics Dashboard**: Real-time usage statistics at `/stats`
 - **In-Memory Caching**: Fast subtitle delivery with 6-hour cache
 - **Multiple Encodings**: Handles UTF-8, UTF-16, legacy codepages, and more
+- **Gzip Compression**: Optimized response sizes for faster loading
+- **Privacy Focused**: No personal data collection, open source
 - **Free & Open Source**: No API keys required, completely free to use
 
 ## 📸 How It Looks
@@ -131,14 +134,25 @@ To use on other devices in your network:
 
 ```
 stremio-dual-subtitles/
-├── addon.js          # Main addon logic (fetching, merging)
-├── server.js         # Express server and routing
-├── encoding.js       # Character encoding detection
-├── languages.js      # Language maps and utilities
-├── landingTemplate.js # Configuration page HTML
-├── package.json      # Dependencies
-├── .env.example      # Environment variables template
-└── README.md         # This file
+├── addon.js           # Main addon logic (fetching, merging)
+├── server.js          # Express server and routing
+├── encoding.js        # Character encoding detection
+├── languages.js       # Language maps and utilities
+├── landingTemplate.js # Landing page HTML template
+├── lib/
+│   ├── analytics.js   # Usage tracking system
+│   ├── debug.js       # Logging utilities
+│   └── templates.js   # HTML templates (stats, privacy, errors)
+├── public/
+│   └── logo.png       # Addon logo
+├── .github/
+│   └── workflows/
+│       └── ci.yml     # GitHub Actions CI/CD
+├── package.json       # Dependencies
+├── vercel.json        # Vercel deployment config
+├── CHANGELOG.md       # Version history
+├── .env.example       # Environment variables template
+└── README.md          # This file
 ```
 
 ## 🔧 Technical Details
