@@ -1,6 +1,6 @@
 /**
  * Landing page template for the Dual Subtitles addon.
- * Modern, professional configuration interface with animations.
+ * Professional, user-focused design with configuration upfront.
  */
 
 const { getLanguageOptions } = require('./languages');
@@ -22,9 +22,8 @@ function generateLandingHTML(manifest, baseUrl) {
   <!-- SEO Meta Tags -->
   <meta name="description" content="${manifest.description}">
   <meta name="keywords" content="stremio, addon, dual subtitles, language learning, subtitles, movies, series">
-  <meta name="author" content="Dual Subtitles">
   
-  <!-- Open Graph / Facebook -->
+  <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="${baseUrl}">
   <meta property="og:title" content="${manifest.name} - Learn Languages While Watching">
@@ -33,8 +32,7 @@ function generateLandingHTML(manifest, baseUrl) {
   
   <!-- Twitter -->
   <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:url" content="${baseUrl}">
-  <meta property="twitter:title" content="${manifest.name} - Learn Languages While Watching">
+  <meta property="twitter:title" content="${manifest.name}">
   <meta property="twitter:description" content="${manifest.description}">
   <meta property="twitter:image" content="${manifest.logo}">
   
@@ -48,574 +46,552 @@ function generateLandingHTML(manifest, baseUrl) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
     :root {
-      --primary: #667eea;
-      --primary-dark: #5a67d8;
-      --secondary: #764ba2;
-      --bg-dark: #0f0f1a;
-      --bg-card: rgba(255, 255, 255, 0.03);
-      --text: #ffffff;
-      --text-muted: rgba(255, 255, 255, 0.6);
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --secondary: #8b5cf6;
+      --accent: #22d3ee;
+      --bg: #09090b;
+      --bg-elevated: #18181b;
+      --bg-card: rgba(24, 24, 27, 0.8);
+      --text: #fafafa;
+      --text-muted: #a1a1aa;
       --border: rgba(255, 255, 255, 0.08);
-      --success: #10b981;
+      --success: #22c55e;
       --gradient: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
     }
-
-    html {
-      scroll-behavior: smooth;
-    }
-
+    
+    html { scroll-behavior: smooth; }
+    
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg-dark);
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
       color: var(--text);
       line-height: 1.6;
       overflow-x: hidden;
     }
-
-    /* Animated Background */
-    .bg-animation {
+    
+    /* Background Effects */
+    .bg-grid {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: -1;
-      background: 
-        radial-gradient(ellipse at 20% 20%, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(118, 75, 162, 0.15) 0%, transparent 50%),
-        var(--bg-dark);
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+      background-size: 64px 64px;
+      z-index: -2;
     }
-
-    .floating-orb {
-      position: absolute;
+    
+    .bg-glow {
+      position: fixed;
+      width: 600px;
+      height: 600px;
       border-radius: 50%;
-      filter: blur(60px);
-      animation: float 20s ease-in-out infinite;
+      filter: blur(120px);
+      z-index: -1;
+      opacity: 0.4;
     }
-
-    .orb-1 {
-      width: 400px;
-      height: 400px;
-      background: rgba(102, 126, 234, 0.2);
-      top: 10%;
-      left: 10%;
-      animation-delay: 0s;
+    
+    .glow-1 {
+      background: var(--primary);
+      top: -200px;
+      right: -100px;
     }
-
-    .orb-2 {
-      width: 300px;
-      height: 300px;
-      background: rgba(118, 75, 162, 0.2);
-      top: 60%;
-      right: 10%;
-      animation-delay: -7s;
+    
+    .glow-2 {
+      background: var(--secondary);
+      bottom: -200px;
+      left: -100px;
     }
-
-    .orb-3 {
-      width: 250px;
-      height: 250px;
-      background: rgba(102, 126, 234, 0.15);
-      bottom: 10%;
-      left: 30%;
-      animation-delay: -14s;
-    }
-
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) rotate(0deg); }
-      25% { transform: translate(50px, -50px) rotate(5deg); }
-      50% { transform: translate(0, -100px) rotate(0deg); }
-      75% { transform: translate(-50px, -50px) rotate(-5deg); }
-    }
-
+    
     /* Navigation */
     .nav {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
-      padding: 20px 40px;
+      padding: 16px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       z-index: 100;
-      background: rgba(15, 15, 26, 0.8);
-      backdrop-filter: blur(20px);
+      background: rgba(9, 9, 11, 0.8);
+      backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
     }
-
-    .nav-logo {
+    
+    .nav-brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       text-decoration: none;
       color: var(--text);
     }
-
-    .nav-logo img {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+    
+    .nav-brand img {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
     }
-
-    .nav-logo span {
+    
+    .nav-brand span {
       font-weight: 700;
-      font-size: 18px;
+      font-size: 16px;
     }
-
+    
     .nav-links {
       display: flex;
-      gap: 30px;
+      gap: 32px;
       align-items: center;
     }
-
+    
     .nav-links a {
       color: var(--text-muted);
       text-decoration: none;
       font-size: 14px;
       font-weight: 500;
-      transition: color 0.3s;
+      transition: color 0.2s;
     }
-
-    .nav-links a:hover {
-      color: var(--text);
-    }
-
-    .nav-btn {
-      background: var(--gradient);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 14px;
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-
-    .nav-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-    }
-
-    /* Hero Section */
-    .hero {
-      min-height: 100vh;
+    
+    .nav-links a:hover { color: var(--text); }
+    
+    .nav-github {
       display: flex;
       align-items: center;
-      justify-content: center;
-      padding: 120px 20px 80px;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
     }
-
+    
+    .nav-github:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    
+    .nav-github svg { width: 16px; height: 16px; }
+    
+    /* Hero Section - Split Layout */
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+      padding: 120px 80px 80px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
     .hero-content {
-      max-width: 800px;
-      text-align: center;
+      max-width: 540px;
     }
-
+    
     .hero-badge {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: rgba(102, 126, 234, 0.1);
-      border: 1px solid rgba(102, 126, 234, 0.3);
-      padding: 8px 16px;
-      border-radius: 50px;
-      font-size: 13px;
-      color: var(--primary);
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary-light);
       margin-bottom: 24px;
-      animation: fadeInUp 0.6s ease-out;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
-
-    .hero-badge svg {
-      width: 16px;
-      height: 16px;
+    
+    .hero-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
     }
-
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+    
     .hero h1 {
-      font-size: clamp(40px, 8vw, 72px);
+      font-size: 56px;
       font-weight: 800;
       line-height: 1.1;
-      margin-bottom: 24px;
-      animation: fadeInUp 0.6s ease-out 0.1s both;
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
     }
-
-    .hero h1 .gradient-text {
+    
+    .hero h1 .highlight {
       background: var(--gradient);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-
-    .hero p {
+    
+    .hero-desc {
       font-size: 18px;
       color: var(--text-muted);
-      max-width: 600px;
-      margin: 0 auto 40px;
-      animation: fadeInUp 0.6s ease-out 0.2s both;
+      margin-bottom: 32px;
+      line-height: 1.7;
     }
-
-    .hero-buttons {
+    
+    .hero-features {
       display: flex;
-      gap: 16px;
-      justify-content: center;
       flex-wrap: wrap;
-      animation: fadeInUp 0.6s ease-out 0.3s both;
+      gap: 16px;
     }
-
-    @keyframes fadeInUp {
-      from {
-        opacity: 0;
-        transform: translateY(30px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+    
+    .hero-feature {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--text-muted);
     }
-
+    
+    .hero-feature svg {
+      width: 18px;
+      height: 18px;
+      color: var(--success);
+    }
+    
+    /* Configuration Card */
+    .config-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 40px;
+      backdrop-filter: blur(16px);
+    }
+    
+    .config-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    
+    .config-header h2 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    
+    .config-header p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    
+    .form-group .tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    
+    .tag-learning {
+      background: rgba(34, 211, 238, 0.1);
+      color: var(--accent);
+    }
+    
+    .tag-native {
+      background: rgba(139, 92, 246, 0.1);
+      color: var(--secondary);
+    }
+    
+    select {
+      width: 100%;
+      padding: 14px 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a1a1aa'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      background-size: 18px;
+    }
+    
+    select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    
+    select option {
+      background: var(--bg);
+      color: var(--text);
+    }
+    
+    /* Preview Box */
+    .preview-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 24px 0;
+      text-align: center;
+    }
+    
+    .preview-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    
+    .preview-primary {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .preview-secondary {
+      font-size: 14px;
+      font-style: italic;
+      color: var(--text-muted);
+    }
+    
     /* Buttons */
     .btn {
-      display: inline-flex;
+      display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
-      padding: 16px 32px;
+      width: 100%;
+      padding: 14px 24px;
       border-radius: 12px;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: all 0.2s;
       text-decoration: none;
       border: none;
       font-family: inherit;
     }
-
+    
     .btn-primary {
       background: var(--gradient);
       color: white;
-      box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 4px 24px rgba(99, 102, 241, 0.4);
     }
-
+    
     .btn-primary:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 20px 50px rgba(102, 126, 234, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.5);
     }
-
+    
     .btn-secondary {
-      background: var(--bg-card);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    .btn svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    /* Stats Section */
-    .stats {
-      padding: 40px 20px;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-card);
-    }
-
-    .stats-container {
-      max-width: 1000px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 40px;
-    }
-
-    .stat-item {
-      text-align: center;
-    }
-
-    .stat-value {
-      font-size: 36px;
-      font-weight: 800;
-      background: var(--gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .stat-label {
-      font-size: 14px;
+      background: transparent;
       color: var(--text-muted);
-      margin-top: 4px;
+      border: 1px solid var(--border);
+      margin-top: 12px;
     }
-
-    /* Features Section */
-    .features {
-      padding: 100px 20px;
+    
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
     }
-
-    .section-header {
-      text-align: center;
-      max-width: 600px;
-      margin: 0 auto 60px;
+    
+    .btn svg { width: 18px; height: 18px; }
+    
+    /* Trust Badges */
+    .trust-badges {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
     }
-
-    .section-header h2 {
+    
+    .trust-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .trust-badge svg {
+      width: 14px;
+      height: 14px;
+      color: var(--success);
+    }
+    
+    /* How It Works */
+    .how-section {
+      padding: 100px 80px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .section-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--primary-light);
+      margin-bottom: 12px;
+    }
+    
+    .section-title {
       font-size: 36px;
       font-weight: 700;
-      margin-bottom: 16px;
+      margin-bottom: 48px;
     }
-
-    .section-header p {
-      color: var(--text-muted);
-      font-size: 16px;
-    }
-
-    .features-grid {
-      max-width: 1200px;
-      margin: 0 auto;
+    
+    .steps-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 24px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
     }
-
-    .feature-card {
+    
+    .step-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 32px;
-      transition: all 0.3s ease;
-    }
-
-    .feature-card:hover {
-      transform: translateY(-5px);
-      border-color: rgba(102, 126, 234, 0.3);
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-    }
-
-    .feature-icon {
-      width: 56px;
-      height: 56px;
-      background: var(--gradient);
       border-radius: 16px;
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .step-card::before {
+      content: attr(data-step);
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      font-size: 72px;
+      font-weight: 800;
+      color: rgba(99, 102, 241, 0.08);
+      line-height: 1;
+    }
+    
+    .step-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--gradient);
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 20px;
-      font-size: 24px;
+      font-size: 22px;
     }
-
-    .feature-card h3 {
-      font-size: 20px;
+    
+    .step-card h3 {
+      font-size: 18px;
       font-weight: 600;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
-
-    .feature-card p {
-      color: var(--text-muted);
+    
+    .step-card p {
       font-size: 14px;
-      line-height: 1.7;
+      color: var(--text-muted);
+      line-height: 1.6;
     }
-
-    /* How It Works Section */
-    .how-it-works {
-      padding: 100px 20px;
-      background: var(--bg-card);
-    }
-
-    .steps-container {
-      max-width: 1000px;
+    
+    /* Features Grid */
+    .features-section {
+      padding: 80px;
+      max-width: 1400px;
       margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 40px;
     }
-
-    .step {
-      display: flex;
-      align-items: flex-start;
-      gap: 30px;
+    
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
     }
-
-    .step-number {
-      width: 60px;
-      height: 60px;
-      background: var(--gradient);
-      border-radius: 16px;
+    
+    .feature-item {
+      display: flex;
+      gap: 16px;
+      padding: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: all 0.2s;
+    }
+    
+    .feature-item:hover {
+      border-color: rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.03);
+    }
+    
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      background: rgba(99, 102, 241, 0.1);
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      font-weight: 800;
+      font-size: 18px;
       flex-shrink: 0;
     }
-
-    .step-content h3 {
-      font-size: 22px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .step-content p {
-      color: var(--text-muted);
+    
+    .feature-item h4 {
       font-size: 15px;
-      line-height: 1.7;
+      font-weight: 600;
+      margin-bottom: 4px;
     }
-
-    /* Preview Section */
-    .preview {
-      padding: 100px 20px;
+    
+    .feature-item p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
     }
-
-    .preview-container {
+    
+    /* FAQ */
+    .faq-section {
+      padding: 80px;
       max-width: 800px;
       margin: 0 auto;
     }
-
-    .subtitle-preview {
-      background: rgba(0, 0, 0, 0.8);
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      border: 1px solid var(--border);
-    }
-
-    .preview-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      margin-bottom: 24px;
-    }
-
-    .preview-primary {
-      font-size: 24px;
-      font-weight: 500;
-      margin-bottom: 8px;
-      color: #fff;
-    }
-
-    .preview-secondary {
-      font-size: 20px;
-      font-style: italic;
-      color: rgba(255, 255, 255, 0.7);
-    }
-
-    /* Configuration Section */
-    .configure {
-      padding: 100px 20px;
-      background: var(--bg-card);
-    }
-
-    .configure-card {
-      max-width: 500px;
-      margin: 0 auto;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 40px;
-    }
-
-    .form-group {
-      margin-bottom: 24px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .form-group .hint {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 6px;
-    }
-
-    select {
-      width: 100%;
-      padding: 16px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      color: var(--text);
-      font-size: 15px;
-      font-family: inherit;
-      cursor: pointer;
-      transition: all 0.3s;
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23ffffff'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 16px center;
-      background-size: 20px;
-    }
-
-    select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-    }
-
-    select option {
-      background: var(--bg-dark);
-      color: var(--text);
-    }
-
-    .button-group {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 32px;
-    }
-
-    .divider {
-      display: flex;
-      align-items: center;
-      color: var(--text-muted);
-      font-size: 12px;
-      margin: 8px 0;
-    }
-
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    .divider::before { margin-right: 16px; }
-    .divider::after { margin-left: 16px; }
-
-    /* FAQ Section */
-    .faq {
-      padding: 100px 20px;
-    }
-
-    .faq-container {
-      max-width: 700px;
-      margin: 0 auto;
-    }
-
+    
     .faq-item {
       border-bottom: 1px solid var(--border);
     }
-
-    .faq-question {
+    
+    .faq-q {
       width: 100%;
-      padding: 24px 0;
+      padding: 20px 0;
       background: none;
       border: none;
       color: var(--text);
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
       text-align: left;
       cursor: pointer;
@@ -624,449 +600,365 @@ function generateLandingHTML(manifest, baseUrl) {
       align-items: center;
       font-family: inherit;
     }
-
-    .faq-question svg {
-      width: 20px;
-      height: 20px;
-      transition: transform 0.3s;
+    
+    .faq-q svg {
+      width: 18px;
+      height: 18px;
       color: var(--text-muted);
+      transition: transform 0.2s;
     }
-
-    .faq-question.active svg {
-      transform: rotate(180deg);
-    }
-
-    .faq-answer {
+    
+    .faq-q.active svg { transform: rotate(180deg); }
+    
+    .faq-a {
       max-height: 0;
       overflow: hidden;
-      transition: max-height 0.3s ease-out;
+      transition: max-height 0.3s;
     }
-
-    .faq-answer-content {
-      padding-bottom: 24px;
+    
+    .faq-a-content {
+      padding-bottom: 20px;
+      font-size: 14px;
       color: var(--text-muted);
-      font-size: 15px;
       line-height: 1.7;
     }
-
+    
     /* Footer */
     .footer {
-      padding: 60px 20px;
+      padding: 40px 80px;
       border-top: 1px solid var(--border);
-      text-align: center;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1400px;
+      margin: 0 auto;
     }
-
+    
     .footer-links {
       display: flex;
-      justify-content: center;
-      gap: 30px;
-      margin-bottom: 24px;
+      gap: 24px;
     }
-
+    
     .footer-links a {
       color: var(--text-muted);
       text-decoration: none;
-      font-size: 14px;
-      transition: color 0.3s;
+      font-size: 13px;
+      transition: color 0.2s;
     }
-
-    .footer-links a:hover {
-      color: var(--text);
-    }
-
-    .footer-copyright {
+    
+    .footer-links a:hover { color: var(--text); }
+    
+    .footer-copy {
       font-size: 13px;
       color: var(--text-muted);
     }
-
+    
     /* Toast */
     .toast {
       position: fixed;
-      bottom: 30px;
+      bottom: 24px;
       left: 50%;
       transform: translateX(-50%) translateY(100px);
       background: var(--success);
       color: white;
-      padding: 16px 32px;
-      border-radius: 12px;
+      padding: 14px 24px;
+      border-radius: 10px;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 500;
       opacity: 0;
-      transition: all 0.3s ease;
+      transition: all 0.3s;
       z-index: 1000;
-      display: flex;
-      align-items: center;
-      gap: 10px;
     }
-
+    
     .toast.show {
       transform: translateX(-50%) translateY(0);
       opacity: 1;
     }
-
+    
     /* Responsive */
-    @media (max-width: 768px) {
-      .nav {
-        padding: 15px 20px;
-      }
-
-      .nav-links {
-        display: none;
-      }
-
+    @media (max-width: 1024px) {
       .hero {
-        padding: 100px 20px 60px;
-      }
-
-      .stats-container {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 30px;
-      }
-
-      .step {
-        flex-direction: column;
-        text-align: center;
-        align-items: center;
-      }
-
-      .features-grid {
         grid-template-columns: 1fr;
+        gap: 48px;
+        padding: 100px 24px 60px;
+        text-align: center;
       }
-
-      .configure-card {
-        padding: 30px 20px;
+      
+      .hero-content { max-width: 100%; }
+      .hero h1 { font-size: 40px; }
+      .hero-features { justify-content: center; }
+      .config-card { max-width: 480px; margin: 0 auto; }
+      
+      .how-section, .features-section, .faq-section, .footer {
+        padding-left: 24px;
+        padding-right: 24px;
+      }
+      
+      .steps-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      
+      .footer {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
       }
     }
-
-    @media (max-width: 480px) {
-      .hero h1 {
-        font-size: 32px;
-      }
-
-      .hero p {
-        font-size: 16px;
-      }
-
-      .stat-value {
-        font-size: 28px;
-      }
-
-      .section-header h2 {
-        font-size: 28px;
-      }
+    
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .hero h1 { font-size: 32px; }
+      .section-title { font-size: 28px; }
+      .trust-badges { flex-direction: column; gap: 12px; }
     }
   </style>
 </head>
 <body>
-  <!-- Animated Background -->
-  <div class="bg-animation">
-    <div class="floating-orb orb-1"></div>
-    <div class="floating-orb orb-2"></div>
-    <div class="floating-orb orb-3"></div>
-  </div>
-
+  <!-- Background -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow glow-1"></div>
+  <div class="bg-glow glow-2"></div>
+  
   <!-- Navigation -->
   <nav class="nav">
-    <a href="#" class="nav-logo">
+    <a href="#" class="nav-brand">
       <img src="${manifest.logo}" alt="Logo">
       <span>${manifest.name}</span>
     </a>
     <div class="nav-links">
+      <a href="#how">How It Works</a>
       <a href="#features">Features</a>
-      <a href="#how-it-works">How It Works</a>
       <a href="#faq">FAQ</a>
-      <a href="https://github.com/ummugulsunn/stremio-dual-subtitles" target="_blank" class="nav-btn">GitHub</a>
+      <a href="https://github.com/ummugulsunn/stremio-dual-subtitles" target="_blank" class="nav-github">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        Star on GitHub
+      </a>
     </div>
   </nav>
-
+  
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-content">
-      <div class="hero-badge">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        Free & Open Source Stremio Addon
-      </div>
-      <h1>
-        Learn Languages<br>
-        <span class="gradient-text">While You Watch</span>
-      </h1>
-      <p>
-        Display two subtitle languages simultaneously. Perfect for language learners 
-        who want to understand content in context while building vocabulary naturally.
+      <div class="hero-badge">Stremio Addon • Free Forever</div>
+      <h1>Watch Movies,<br><span class="highlight">Learn Languages</span></h1>
+      <p class="hero-desc">
+        Display two subtitle languages simultaneously while watching. 
+        See the original dialogue with your native translation below — 
+        the natural way to learn a new language.
       </p>
-      <div class="hero-buttons">
-        <a href="#configure" class="btn btn-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-          </svg>
-          Get Started Free
-        </a>
-        <a href="https://github.com/ummugulsunn/stremio-dual-subtitles" target="_blank" class="btn btn-secondary">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-          View on GitHub
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Stats Section -->
-  <section class="stats">
-    <div class="stats-container">
-      <div class="stat-item">
-        <div class="stat-value">70+</div>
-        <div class="stat-label">Languages Supported</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">Free</div>
-        <div class="stat-label">Forever, No Ads</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">∞</div>
-        <div class="stat-label">Movies & Series</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">24/7</div>
-        <div class="stat-label">Available</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Features Section -->
-  <section class="features" id="features">
-    <div class="section-header">
-      <h2>Why Choose Dual Subtitles?</h2>
-      <p>The smartest way to learn a language through entertainment</p>
-    </div>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon">🎯</div>
-        <h3>Immersive Learning</h3>
-        <p>Learn vocabulary in context. See how words are actually used in real conversations, not just textbook examples.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">⚡</div>
-        <h3>Instant Setup</h3>
-        <p>Configure once, enjoy forever. No account needed, no complicated setup. Just select your languages and start watching.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🌍</div>
-        <h3>70+ Languages</h3>
-        <p>From Spanish to Japanese, Arabic to Korean. All major world languages supported through OpenSubtitles.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔄</div>
-        <h3>Smart Sync</h3>
-        <p>Advanced algorithm matches subtitles by timing, ensuring translations align perfectly with the original dialogue.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🎬</div>
-        <h3>All Content</h3>
-        <p>Works with any movie or TV series in Stremio. If subtitles exist for both languages, we'll merge them.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔒</div>
-        <h3>Privacy First</h3>
-        <p>No tracking, no data collection, no ads. Your viewing habits stay private. Completely open source.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- How It Works Section -->
-  <section class="how-it-works" id="how-it-works">
-    <div class="section-header">
-      <h2>How It Works</h2>
-      <p>Three simple steps to start learning</p>
-    </div>
-    <div class="steps-container">
-      <div class="step">
-        <div class="step-number">1</div>
-        <div class="step-content">
-          <h3>Configure Your Languages</h3>
-          <p>Select the language you're learning (primary) and your native language (secondary). The primary language appears on top, your native language below in italics.</p>
+      <div class="hero-features">
+        <div class="hero-feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          70+ Languages
         </div>
-      </div>
-      <div class="step">
-        <div class="step-number">2</div>
-        <div class="step-content">
-          <h3>Install the Addon</h3>
-          <p>Click "Install Addon" and Stremio will automatically add it to your addon library. You can also copy the manifest URL for manual installation.</p>
+        <div class="hero-feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          No Account Required
         </div>
-      </div>
-      <div class="step">
-        <div class="step-number">3</div>
-        <div class="step-content">
-          <h3>Watch & Learn</h3>
-          <p>Play any movie or series. When subtitles are available, you'll see your dual subtitle option with a 🌍 icon. Select it and enjoy learning!</p>
+        <div class="hero-feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Works on All Devices
+        </div>
+        <div class="hero-feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Open Source
         </div>
       </div>
     </div>
-  </section>
-
-  <!-- Preview Section -->
-  <section class="preview">
-    <div class="preview-container">
-      <div class="section-header">
-        <h2>See It In Action</h2>
-        <p>This is what you'll see when watching</p>
+    
+    <div class="config-card">
+      <div class="config-header">
+        <h2>Get Started in Seconds</h2>
+        <p>Select your languages and install</p>
       </div>
-      <div class="subtitle-preview">
-        <div class="preview-label">Live Preview</div>
-        <div class="preview-primary" id="previewPrimary">Hello, how are you today?</div>
-        <div class="preview-secondary" id="previewSecondary">Merhaba, bugün nasılsın?</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Configuration Section -->
-  <section class="configure" id="configure">
-    <div class="section-header">
-      <h2>Configure & Install</h2>
-      <p>Select your languages and get started in seconds</p>
-    </div>
-    <div class="configure-card">
+      
       <form id="configForm">
         <div class="form-group">
-          <label>Primary Language (Learning)</label>
+          <label>
+            Primary Language
+            <span class="tag tag-learning">Learning</span>
+          </label>
           <select id="mainLang" name="mainLang">
             ${optionsHTML}
           </select>
-          <div class="hint">The language you want to learn - appears on top</div>
         </div>
-
+        
         <div class="form-group">
-          <label>Secondary Language (Native)</label>
+          <label>
+            Secondary Language
+            <span class="tag tag-native">Native</span>
+          </label>
           <select id="transLang" name="transLang">
             ${optionsHTML}
           </select>
-          <div class="hint">Your native language - appears below in italics</div>
         </div>
-
-        <div class="button-group">
-          <button type="button" class="btn btn-primary" onclick="installAddon()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Install to Stremio
-          </button>
-          
-          <div class="divider">or</div>
-          
-          <button type="button" class="btn btn-secondary" onclick="copyManifestUrl()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-            Copy Manifest URL
-          </button>
+        
+        <div class="preview-box">
+          <div class="preview-label">Live Preview</div>
+          <div class="preview-primary" id="previewPrimary">Hello, how are you today?</div>
+          <div class="preview-secondary" id="previewSecondary">Merhaba, bugün nasılsın?</div>
         </div>
+        
+        <button type="button" class="btn btn-primary" onclick="installAddon()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Install to Stremio
+        </button>
+        
+        <button type="button" class="btn btn-secondary" onclick="copyManifestUrl()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy Manifest URL
+        </button>
       </form>
-    </div>
-  </section>
-
-  <!-- FAQ Section -->
-  <section class="faq" id="faq">
-    <div class="section-header">
-      <h2>Frequently Asked Questions</h2>
-    </div>
-    <div class="faq-container">
-      <div class="faq-item">
-        <button class="faq-question">
-          Is this addon free?
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-content">
-            Yes, completely free! No premium tiers, no ads, no hidden costs. The addon is open source and will always remain free.
-          </div>
+      
+      <div class="trust-badges">
+        <div class="trust-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Privacy Focused
         </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question">
-          Where do the subtitles come from?
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-content">
-            Subtitles are fetched from OpenSubtitles, the world's largest subtitle database. The addon merges two language files into one synchronized dual subtitle file.
-          </div>
+        <div class="trust-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          No Ads Ever
         </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question">
-          Why are subtitles not showing for some content?
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-content">
-            Dual subtitles require both languages to be available for that specific content. If either language is missing from OpenSubtitles, the merged option won't appear. Try popular movies and series for best results.
-          </div>
-        </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question">
-          Can I use this on my TV/phone?
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-content">
-            Yes! Once installed, the addon works on any device where you use Stremio - Android TV, Fire Stick, iOS, Android phones, desktop, etc.
-          </div>
-        </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question">
-          How do I change languages after installing?
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-content">
-            Simply come back to this page, select new languages, and click install again. Stremio will update your existing addon configuration.
-          </div>
+        <div class="trust-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          Always Free
         </div>
       </div>
     </div>
   </section>
-
+  
+  <!-- How It Works -->
+  <section class="how-section" id="how">
+    <div class="section-label">Simple Setup</div>
+    <h2 class="section-title">How It Works</h2>
+    
+    <div class="steps-grid">
+      <div class="step-card" data-step="01">
+        <div class="step-icon">🎯</div>
+        <h3>Choose Languages</h3>
+        <p>Pick the language you're learning and your native language. We'll show both simultaneously.</p>
+      </div>
+      <div class="step-card" data-step="02">
+        <div class="step-icon">⚡</div>
+        <h3>One-Click Install</h3>
+        <p>Click install and Stremio automatically adds the addon. No accounts, no configuration files.</p>
+      </div>
+      <div class="step-card" data-step="03">
+        <div class="step-icon">🎬</div>
+        <h3>Watch & Learn</h3>
+        <p>Play any content. Select the dual subtitle option and start learning naturally through context.</p>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Features -->
+  <section class="features-section" id="features">
+    <div class="section-label">Why Choose Us</div>
+    <h2 class="section-title">Built for Language Learners</h2>
+    
+    <div class="features-grid">
+      <div class="feature-item">
+        <div class="feature-icon">🌍</div>
+        <div>
+          <h4>70+ Languages Supported</h4>
+          <p>From Spanish to Japanese, Arabic to Korean. All major languages via OpenSubtitles.</p>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🔄</div>
+        <div>
+          <h4>Smart Synchronization</h4>
+          <p>Advanced matching ensures translations align perfectly with original dialogue timing.</p>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">📱</div>
+        <div>
+          <h4>All Devices</h4>
+          <p>Works on Android TV, Fire Stick, iOS, Android, Windows, Mac, and Linux.</p>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🔒</div>
+        <div>
+          <h4>Privacy First</h4>
+          <p>No tracking, no data collection. Your viewing habits stay completely private.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- FAQ -->
+  <section class="faq-section" id="faq">
+    <div class="section-label">Questions?</div>
+    <h2 class="section-title">Frequently Asked</h2>
+    
+    <div class="faq-item">
+      <button class="faq-q">
+        Is this completely free?
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="faq-a">
+        <div class="faq-a-content">Yes, 100% free with no premium tiers, no ads, and no hidden costs. The addon is open source and will always remain free.</div>
+      </div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">
+        Why aren't subtitles showing for some content?
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="faq-a">
+        <div class="faq-a-content">Dual subtitles require both languages to be available on OpenSubtitles. If either is missing, the option won't appear. Popular content usually has better coverage.</div>
+      </div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">
+        How do I change languages later?
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="faq-a">
+        <div class="faq-a-content">Simply return to this page, select new languages, and click install again. Stremio will update your configuration automatically.</div>
+      </div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">
+        Does this work on smart TVs?
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="faq-a">
+        <div class="faq-a-content">Yes! Once installed, the addon works on any device running Stremio — Android TV, Fire Stick, Apple TV (via web), and more.</div>
+      </div>
+    </div>
+  </section>
+  
   <!-- Footer -->
   <footer class="footer">
     <div class="footer-links">
       <a href="https://github.com/ummugulsunn/stremio-dual-subtitles" target="_blank">GitHub</a>
-      <a href="${baseUrl}/privacy">Privacy Policy</a>
+      <a href="${baseUrl}/privacy">Privacy</a>
       <a href="https://www.stremio.com/" target="_blank">Get Stremio</a>
     </div>
-    <div class="footer-copyright">
-      Made with ❤️ for language learners • Version ${manifest.version}
-    </div>
+    <div class="footer-copy">v${manifest.version} • Made for language learners</div>
   </footer>
-
-  <!-- Toast Notification -->
-  <div class="toast" id="toast">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-      <polyline points="22 4 12 14.01 9 11.01"/>
-    </svg>
-    <span id="toastMessage">Copied to clipboard!</span>
-  </div>
-
+  
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+  
   <script>
     const BASE_URL = '${baseUrl}';
     
-    // Language detection and defaults
-    const browserLang = navigator.language || navigator.userLanguage;
     const langMap = {
       'tr': 'Turkish [tur]', 'en': 'English [eng]', 'es': 'Spanish [spa]',
       'fr': 'French [fre]', 'de': 'German [ger]', 'it': 'Italian [ita]',
       'pt': 'Portuguese [por]', 'ru': 'Russian [rus]', 'ja': 'Japanese [jpn]',
       'ko': 'Korean [kor]', 'zh': 'Chinese (Simplified) [chi]', 'ar': 'Arabic [ara]',
-      'hi': 'Hindi [hin]', 'pl': 'Polish [pol]', 'nl': 'Dutch [dut]',
-      'sv': 'Swedish [swe]', 'da': 'Danish [dan]', 'no': 'Norwegian [nor]',
-      'fi': 'Finnish [fin]', 'el': 'Greek [ell]', 'cs': 'Czech [cze]',
-      'hu': 'Hungarian [hun]', 'ro': 'Romanian [rum]', 'uk': 'Ukrainian [ukr]',
-      'vi': 'Vietnamese [vie]', 'th': 'Thai [tha]', 'id': 'Indonesian [ind]',
+      'hi': 'Hindi [hin]', 'pl': 'Polish [pol]', 'nl': 'Dutch [dut]'
     };
     
     const previewTexts = {
@@ -1084,95 +976,84 @@ function generateLandingHTML(manifest, baseUrl) {
       'default': 'Hello, how are you today?'
     };
     
-    const baseLang = browserLang.split('-')[0].toLowerCase();
-    const detectedLang = langMap[baseLang];
+    // Detect browser language
+    const browserLang = (navigator.language || '').split('-')[0].toLowerCase();
+    const detectedLang = langMap[browserLang];
     
     // Set defaults
     document.getElementById('mainLang').value = 'English [eng]';
-    if (detectedLang && detectedLang !== 'English [eng]') {
-      document.getElementById('transLang').value = detectedLang;
-    } else {
-      document.getElementById('transLang').value = 'Turkish [tur]';
-    }
-
+    document.getElementById('transLang').value = detectedLang && detectedLang !== 'English [eng]' ? detectedLang : 'Turkish [tur]';
+    
     // Update preview
     function updatePreview() {
-      const transLang = document.getElementById('transLang').value;
-      const transText = previewTexts[transLang] || previewTexts['default'];
-      document.getElementById('previewSecondary').textContent = transText;
+      const trans = document.getElementById('transLang').value;
+      document.getElementById('previewSecondary').textContent = previewTexts[trans] || previewTexts['default'];
     }
     
     document.getElementById('transLang').addEventListener('change', updatePreview);
     updatePreview();
-
+    
     function getConfigUrl() {
-      const mainLang = encodeURIComponent(document.getElementById('mainLang').value);
-      const transLang = encodeURIComponent(document.getElementById('transLang').value);
-      return BASE_URL + '/' + mainLang + '|' + transLang + '/manifest.json';
+      const main = encodeURIComponent(document.getElementById('mainLang').value);
+      const trans = encodeURIComponent(document.getElementById('transLang').value);
+      return BASE_URL + '/' + main + '|' + trans + '/manifest.json';
     }
-
-    function showToast(message) {
-      const toast = document.getElementById('toast');
-      document.getElementById('toastMessage').textContent = message;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
+    
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
     }
-
+    
     function installAddon() {
-      const mainVal = document.getElementById('mainLang').value;
-      const transVal = document.getElementById('transLang').value;
+      const main = document.getElementById('mainLang').value;
+      const trans = document.getElementById('transLang').value;
       
-      if (mainVal === transVal) {
+      if (main === trans) {
         showToast('Please select two different languages!');
         return;
       }
       
-      // Track install
       fetch(BASE_URL + '/api/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'install', mainLang: mainVal, transLang: transVal })
+        body: JSON.stringify({ event: 'install', mainLang: main, transLang: trans })
       }).catch(() => {});
       
-      const manifestUrl = getConfigUrl();
-      const stremioUrl = 'stremio://' + manifestUrl.replace(/^https?:\\/\\//, '');
-      window.location.href = stremioUrl;
+      const url = getConfigUrl();
+      window.location.href = 'stremio://' + url.replace(/^https?:\\/\\//, '');
     }
-
+    
     function copyManifestUrl() {
-      const mainVal = document.getElementById('mainLang').value;
-      const transVal = document.getElementById('transLang').value;
+      const main = document.getElementById('mainLang').value;
+      const trans = document.getElementById('transLang').value;
       
-      if (mainVal === transVal) {
+      if (main === trans) {
         showToast('Please select two different languages!');
         return;
       }
       
-      const url = getConfigUrl();
-      navigator.clipboard.writeText(url).then(() => {
-        showToast('Manifest URL copied!');
-      });
+      navigator.clipboard.writeText(getConfigUrl()).then(() => showToast('Copied to clipboard!'));
     }
-
-    // FAQ Accordion
-    document.querySelectorAll('.faq-question').forEach(button => {
-      button.addEventListener('click', () => {
-        const answer = button.nextElementSibling;
-        const isOpen = button.classList.contains('active');
+    
+    // FAQ accordion
+    document.querySelectorAll('.faq-q').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ans = btn.nextElementSibling;
+        const isOpen = btn.classList.contains('active');
         
-        // Close all
-        document.querySelectorAll('.faq-question').forEach(q => q.classList.remove('active'));
-        document.querySelectorAll('.faq-answer').forEach(a => a.style.maxHeight = null);
+        document.querySelectorAll('.faq-q').forEach(q => q.classList.remove('active'));
+        document.querySelectorAll('.faq-a').forEach(a => a.style.maxHeight = null);
         
-        // Open clicked if was closed
         if (!isOpen) {
-          button.classList.add('active');
-          answer.style.maxHeight = answer.scrollHeight + 'px';
+          btn.classList.add('active');
+          ans.style.maxHeight = ans.scrollHeight + 'px';
         }
       });
     });
-
-    // Track page view
+    
+    // Track pageview
     fetch(BASE_URL + '/api/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
