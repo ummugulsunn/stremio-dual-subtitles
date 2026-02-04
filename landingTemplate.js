@@ -962,17 +962,50 @@ function generateLandingHTML(manifest, baseUrl) {
     };
     
     const previewTexts = {
+      'English [eng]': 'Hello, how are you today?',
       'Turkish [tur]': 'Merhaba, bugün nasılsın?',
       'Spanish [spa]': '¿Hola, cómo estás hoy?',
       'French [fre]': 'Bonjour, comment allez-vous?',
-      'German [ger]': 'Hallo, wie geht es dir?',
+      'German [ger]': 'Hallo, wie geht es dir heute?',
       'Italian [ita]': 'Ciao, come stai oggi?',
-      'Portuguese [por]': 'Olá, como você está?',
-      'Russian [rus]': 'Привет, как дела?',
-      'Japanese [jpn]': 'こんにちは、元気ですか？',
+      'Portuguese [por]': 'Olá, como você está hoje?',
+      'Russian [rus]': 'Привет, как дела сегодня?',
+      'Japanese [jpn]': 'こんにちは、今日の調子はどう？',
       'Korean [kor]': '안녕하세요, 오늘 기분이 어때요?',
       'Chinese (Simplified) [chi]': '你好，今天怎么样？',
+      'Chinese (Traditional) [zht]': '你好，今天怎麼樣？',
       'Arabic [ara]': 'مرحبا، كيف حالك اليوم؟',
+      'Hindi [hin]': 'नमस्ते, आज आप कैसे हैं?',
+      'Polish [pol]': 'Cześć, jak się dziś masz?',
+      'Dutch [dut]': 'Hallo, hoe gaat het vandaag?',
+      'Swedish [swe]': 'Hej, hur mår du idag?',
+      'Norwegian [nor]': 'Hei, hvordan har du det i dag?',
+      'Danish [dan]': 'Hej, hvordan har du det i dag?',
+      'Finnish [fin]': 'Hei, mitä kuuluu tänään?',
+      'Greek [gre]': 'Γεια σου, πώς είσαι σήμερα;',
+      'Czech [cze]': 'Ahoj, jak se dnes máš?',
+      'Hungarian [hun]': 'Szia, hogy vagy ma?',
+      'Romanian [rum]': 'Bună, ce mai faci azi?',
+      'Bulgarian [bul]': 'Здравей, как си днес?',
+      'Ukrainian [ukr]': 'Привіт, як справи сьогодні?',
+      'Hebrew [heb]': 'שלום, מה שלומך היום?',
+      'Thai [tha]': 'สวัสดี วันนี้เป็นอย่างไรบ้าง?',
+      'Vietnamese [vie]': 'Xin chào, hôm nay bạn thế nào?',
+      'Indonesian [ind]': 'Halo, apa kabar hari ini?',
+      'Malay [may]': 'Hai, apa khabar hari ini?',
+      'Filipino [fil]': 'Kumusta, kamusta ka ngayon?',
+      'Croatian [hrv]': 'Bok, kako si danas?',
+      'Serbian [srp]': 'Здраво, како си данас?',
+      'Slovak [slo]': 'Ahoj, ako sa máš dnes?',
+      'Slovenian [slv]': 'Živjo, kako si danes?',
+      'Estonian [est]': 'Tere, kuidas sul täna läheb?',
+      'Latvian [lav]': 'Sveiki, kā tev šodien klājas?',
+      'Lithuanian [lit]': 'Sveiki, kaip sekasi šiandien?',
+      'Persian [per]': 'سلام، امروز حالت چطوره؟',
+      'Catalan [cat]': 'Hola, com estàs avui?',
+      'Basque [baq]': 'Kaixo, zer moduz zaude gaur?',
+      'Galician [glg]': 'Ola, como estás hoxe?',
+      'Icelandic [ice]': 'Halló, hvernig hefur þú það í dag?',
       'default': 'Hello, how are you today?'
     };
     
@@ -984,12 +1017,15 @@ function generateLandingHTML(manifest, baseUrl) {
     document.getElementById('mainLang').value = 'English [eng]';
     document.getElementById('transLang').value = detectedLang && detectedLang !== 'English [eng]' ? detectedLang : 'Turkish [tur]';
     
-    // Update preview
+    // Update preview - both primary and secondary
     function updatePreview() {
+      const main = document.getElementById('mainLang').value;
       const trans = document.getElementById('transLang').value;
+      document.getElementById('previewPrimary').textContent = previewTexts[main] || previewTexts['default'];
       document.getElementById('previewSecondary').textContent = previewTexts[trans] || previewTexts['default'];
     }
     
+    document.getElementById('mainLang').addEventListener('change', updatePreview);
     document.getElementById('transLang').addEventListener('change', updatePreview);
     updatePreview();
     
