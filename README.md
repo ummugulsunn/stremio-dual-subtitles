@@ -6,6 +6,12 @@ A Stremio addon that displays **two subtitle languages simultaneously** - perfec
 ![Stremio](https://img.shields.io/badge/Stremio-Addon-purple)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+## 🚀 Live Demo
+
+**[https://stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)**
+
+Click the link to configure and install the addon instantly!
+
 ## ✨ Features
 
 - **Dual Subtitles**: See two languages at once - primary on top, secondary below
@@ -28,16 +34,25 @@ The primary language appears normally, while the secondary language appears in i
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Use Public Instance (Recommended)
 
+1. Visit **[https://stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)**
+2. Select your primary language (the one you're learning)
+3. Select your secondary language (your native language)
+4. Click "Install Addon"
+5. Open Stremio and enjoy dual subtitles!
+
+### Option 2: Run Locally
+
+**Prerequisites:**
 - [Node.js](https://nodejs.org/) v16 or higher
 - [Stremio](https://www.stremio.com/) installed on your device
 
-### Installation
+**Installation:**
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/stremio-dual-subtitles.git
+   git clone https://github.com/ummugulsunn/stremio-dual-subtitles.git
    cd stremio-dual-subtitles
    ```
 
@@ -53,13 +68,19 @@ The primary language appears normally, while the secondary language appears in i
 
 4. **Configure the addon:**
    - Open your browser and go to `http://localhost:7000/configure`
-   - Select your primary language (the one you're learning)
-   - Select your secondary language (your native language)
-   - Click "Install Addon"
+   - Select your languages and click "Install Addon"
 
-5. **Enjoy!**
-   - Open Stremio and play any movie or series
-   - Select the dual subtitle option from the subtitle menu
+### Option 3: Deploy Your Own
+
+Deploy to Vercel for free:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ummugulsunn/stremio-dual-subtitles)
+
+Or manually:
+```bash
+npm i -g vercel
+vercel
+```
 
 ## ⚙️ Configuration
 
