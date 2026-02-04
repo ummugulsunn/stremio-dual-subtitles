@@ -8,7 +8,71 @@ const { addonBuilder } = require('stremio-addon-sdk');
 const axios = require('axios');
 const pako = require('pako');
 const sanitize = require('sanitize-html');
-const SrtParser = require('srt-parser-2').default;
+/**
+ * Simple SRT parser (more reliable than external libraries)
+ */
+function parseSrtSimple(srtText) {
+  const lines = srtText.trim().split('\n');
+  const subtitles = [];
+  let current = null;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Skip empty lines
+    if (!line) {
+      if (current && current.text) {
+        subtitles.push(current);
+        current = null;
+      }
+      continue;
+    }
+    
+    // Check if it's a sequence number
+    if (!current && /^\d+$/.test(line)) {
+      current = { id: line, text: '' };
+      continue;
+    }
+    
+    // Check if it's a timestamp line
+    if (current && !current.startTime && line.includes('-->')) {
+      const [start, end] = line.split('-->').map(s => s.trim());
+      current.startTime = start;
+      current.endTime = end;
+      continue;
+    }
+    
+    // Otherwise it's text
+    if (current && current.startTime) {
+      if (current.text) current.text += '\n';
+      current.text += line;
+    }
+  }
+  
+  // Add last subtitle if exists
+  if (current && current.text) {
+    subtitles.push(current);
+  }
+  
+  return subtitles;
+}
+
+/**
+ * Simple SRT formatter
+ */
+function formatSrtSimple(subtitles) {
+  const lines = [];
+  
+  for (let i = 0; i < subtitles.length; i++) {
+    const sub = subtitles[i];
+    lines.push(String(i + 1));
+    lines.push(`${sub.startTime} --> ${sub.endTime}`);
+    lines.push(sub.text);
+    lines.push('');
+  }
+  
+  return lines.join('\n');
+}
 
 const { decodeSubtitleBuffer, getLanguageAliases } = require('./encoding');
 const { 
@@ -184,9 +248,8 @@ function parseSrt(srtText) {
       srtText = srtText.substring(1);
     }
     
-    // Use srt-parser-2 to parse
-    const parser = new SrtParser();
-    const parsed = parser.fromSrt(srtText);
+    // Use simple parser
+    const parsed = parseSrtSimple(srtText);
     
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
 
@@ -196,13 +259,7 @@ function parseSrt(srtText) {
       !adKeywords.some(keyword => (sub.text || '').includes(keyword))
     );
 
-    // srt-parser-2 returns: { id, startTime, endTime, text }
-    // startTime/endTime are already in SRT format "HH:MM:SS,mmm"
-    return filtered.map(sub => ({
-      startTime: sub.startTime,
-      endTime: sub.endTime,
-      text: sub.text || ''
-    }));
+    return filtered;
   } catch (error) {
     console.error('Error parsing SRT:', error.message);
     return null;
@@ -306,17 +363,7 @@ function formatSrt(subtitleArray) {
   if (!Array.isArray(subtitleArray)) return null;
 
   try {
-    const parser = new SrtParser();
-    
-    // Ensure IDs are sequential strings
-    const sanitized = subtitleArray.map((sub, index) => ({
-      id: String(index + 1),
-      startTime: sub.startTime,
-      endTime: sub.endTime,
-      text: sub.text
-    }));
-
-    return parser.toSrt(sanitized);
+    return formatSrtSimple(subtitleArray);
   } catch (error) {
     console.error('Error formatting SRT:', error.message);
     return null;
