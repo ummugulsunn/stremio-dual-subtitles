@@ -1,219 +1,190 @@
-# Stremio Dual Subtitles Addon
+# Dual Subtitles for Stremio
 
-A Stremio addon that displays **two subtitle languages simultaneously** - perfect for language learners! Watch your favorite movies and series with both the original language and your native language subtitles.
+A Stremio addon that displays **two subtitle languages simultaneously** - designed for language learners who want to watch movies and TV series with bilingual subtitles.
 
-![Language Learning](https://img.shields.io/badge/Language-Learning-blue)
-![Stremio](https://img.shields.io/badge/Stremio-Addon-purple)
-![License](https://img.shields.io/badge/License-MIT-green)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-7c3aed)](https://stremio-dual-subtitles.vercel.app)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
 
-## 🚀 Live Demo
+---
 
-**[https://stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)**
+## Demo
 
-Click the link to configure and install the addon instantly!
+![Dual Subtitles in Action](public/demo.png)
 
-## ✨ Features
+*Primary language on top, secondary language below in italics.*
 
-- **Dual Subtitles**: See two languages at once - primary on top, secondary below
-- **70+ Languages**: Support for all major languages from OpenSubtitles
-- **Smart Merging**: Intelligent time-based subtitle synchronization
-- **Auto-Detection**: Automatically detects your browser language
-- **Modern UI**: Beautiful animated landing page with smooth interactions
-- **Analytics Dashboard**: Real-time usage statistics at `/stats`
-- **In-Memory Caching**: Fast subtitle delivery with 6-hour cache
-- **Multiple Encodings**: Handles UTF-8, UTF-16, legacy codepages, and more
-- **Gzip Compression**: Optimized response sizes for faster loading
-- **Privacy Focused**: No personal data collection, open source
-- **Free & Open Source**: No API keys required, completely free to use
+---
 
-## 📸 How It Looks
+## Features
 
-![Dual Subtitles Demo](public/demo.png)
+| Feature | Description |
+|---------|-------------|
+| **Dual Display** | Two languages shown simultaneously - primary on top, translation below |
+| **70+ Languages** | Full OpenSubtitles language support |
+| **Smart Sync** | Time-based subtitle merging algorithm |
+| **Encoding Support** | UTF-8, UTF-16, Windows codepages, ISO-8859 variants |
+| **No Registration** | Works instantly, no API keys required |
+| **Privacy First** | No personal data collection |
 
-*English on top, Turkish translation below in italics - watch and learn simultaneously!*
+---
 
-The primary language appears normally, while the secondary language appears in italics below.
+## Quick Start
 
-## 🚀 Quick Start
+### Public Instance (Recommended)
 
-### Option 1: Use Public Instance (Recommended)
+1. Visit [stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)
+2. Select your primary language (learning) and secondary language (native)
+3. Click "Install to Stremio"
+4. Open any movie or series and select the dual subtitle option
 
-1. Visit **[https://stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)**
-2. Select your primary language (the one you're learning)
-3. Select your secondary language (your native language)
-4. Click "Install Addon"
-5. Open Stremio and enjoy dual subtitles!
+### Self-Hosted
 
-### Option 2: Run Locally
+```bash
+# Clone repository
+git clone https://github.com/ummugulsunn/stremio-dual-subtitles.git
+cd stremio-dual-subtitles
 
-**Prerequisites:**
-- [Node.js](https://nodejs.org/) v16 or higher
-- [Stremio](https://www.stremio.com/) installed on your device
+# Install dependencies
+npm install
 
-**Installation:**
+# Start server
+npm start
+```
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/ummugulsunn/stremio-dual-subtitles.git
-   cd stremio-dual-subtitles
-   ```
+Server runs at `http://localhost:7000/configure`
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Start the server:**
-   ```bash
-   npm start
-   ```
-
-4. **Configure the addon:**
-   - Open your browser and go to `http://localhost:7000/configure`
-   - Select your languages and click "Install Addon"
-
-### Option 3: Deploy Your Own
-
-Deploy to Vercel for free:
+### Deploy to Vercel
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ummugulsunn/stremio-dual-subtitles)
 
-Or manually:
-```bash
-npm i -g vercel
-vercel
-```
+---
 
-## ⚙️ Configuration
+## Configuration
 
 ### Environment Variables
-
-Copy `.env.example` to `.env` and customize:
-
-```bash
-cp .env.example .env
-```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `7000` | Server port |
-| `HOST` | `0.0.0.0` | Host to bind to |
+| `HOST` | `0.0.0.0` | Host binding |
 | `EXTERNAL_URL` | auto | External URL for remote access |
-| `ADDON_NAME` | `Dual Subtitles` | Custom addon name |
-| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window per IP |
-| `RATE_LIMIT_MAX` | `60` | Max requests per IP in window |
-| `DEBUG_MODE` | `false` | Server debug logging |
-| `NEXT_PUBLIC_DEBUG_MODE` | `false` | Debug logging toggle |
+| `ANALYTICS_SECRET` | - | Secret key for `/stats` access |
+| `DEBUG_MODE` | `false` | Enable debug logging |
 
-### Remote Access
+Copy `.env.example` to `.env` and modify as needed.
 
-To use on other devices in your network:
+### Network Access
 
-1. Find your computer's IP address (e.g., `192.168.1.100`)
-2. Set `EXTERNAL_URL=http://192.168.1.100:7000` in `.env`
-3. Open `http://192.168.1.100:7000/configure` on your other device
+For use on other devices:
 
-## 🎯 Usage Tips
-
-### For Language Learning
-
-1. **Choose wisely**: Set the language you're learning as PRIMARY (top)
-2. **Reading practice**: Try to read the primary subtitle first
-3. **Check understanding**: Glance at the secondary subtitle when needed
-4. **Repeat**: Pause and repeat difficult scenes
-
-### Best Content for Learning
-
-- **TV Series**: Consistent dialogue, recurring vocabulary
-- **Animated films**: Clear pronunciation, slower speech
-- **Rom-coms**: Everyday conversational language
-- **Documentaries**: Formal/educational vocabulary
-
-## 🏗️ Project Structure
-
-```
-stremio-dual-subtitles/
-├── addon.js           # Main addon logic (fetching, merging)
-├── server.js          # Express server and routing
-├── encoding.js        # Character encoding detection
-├── languages.js       # Language maps and utilities
-├── landingTemplate.js # Landing page HTML template
-├── lib/
-│   ├── analytics.js   # Usage tracking system
-│   ├── debug.js       # Logging utilities
-│   └── templates.js   # HTML templates (stats, privacy, errors)
-├── public/
-│   └── logo.png       # Addon logo
-├── .github/
-│   └── workflows/
-│       └── ci.yml     # GitHub Actions CI/CD
-├── package.json       # Dependencies
-├── vercel.json        # Vercel deployment config
-├── CHANGELOG.md       # Version history
-├── .env.example       # Environment variables template
-└── README.md          # This file
-```
-
-## 🔧 Technical Details
-
-### Subtitle Sources
-
-- **OpenSubtitles**: Primary source via Stremio's proxy API
-- Subtitles are fetched, decoded, and merged in real-time
-
-### Encoding Support
-
-The addon handles various encodings including:
-- UTF-8, UTF-16 LE/BE (with BOM detection)
-- Windows codepages (1250-1258)
-- ISO-8859 variants
-- Double-encoded UTF-8 text
-
-### Caching
-
-- Merged subtitles are cached in memory for 6 hours
-- No external storage required
-- Cache is cleared on server restart
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Credits
-
-- Inspired by [Strelingo Addon](https://github.com/Serkali-sudo/strelingo-addon)
-- Subtitles provided by [OpenSubtitles](https://www.opensubtitles.org/)
-- Built with [Stremio Addon SDK](https://github.com/Stremio/stremio-addon-sdk)
-
-## 🐛 Troubleshooting
-
-### Subtitles not showing?
-
-1. Make sure both languages are available for that movie/series
-2. Try a different movie - not all content has subtitles
-3. Check the server console for error messages
-
-### Wrong encoding/garbled text?
-
-The addon tries to auto-detect encoding, but some rare files may have issues. 
-Please report these with the movie/series title.
-
-### Can't connect from other devices?
-
-1. Check your firewall settings
-2. Ensure `EXTERNAL_URL` is set correctly
-3. Use your local IP address, not `localhost`
+1. Find your local IP (e.g., `192.168.1.100`)
+2. Set `EXTERNAL_URL=http://192.168.1.100:7000`
+3. Access from other devices using the IP address
 
 ---
 
-**Happy learning! 🎬📚**
+## Project Structure
+
+```
+stremio-dual-subtitles/
+├── addon.js            # Subtitle fetching and merging logic
+├── server.js           # Express server, routing, API endpoints
+├── encoding.js         # Character encoding detection
+├── languages.js        # Language mappings and utilities
+├── landingTemplate.js  # Landing page template
+├── lib/
+│   ├── analytics.js    # Usage tracking
+│   ├── debug.js        # Logging utilities
+│   └── templates.js    # HTML templates
+├── public/
+│   ├── logo.png        # Addon logo
+│   └── demo.png        # Demo screenshot
+├── vercel.json         # Vercel configuration
+└── package.json        # Dependencies
+```
+
+---
+
+## Technical Details
+
+### Subtitle Processing
+
+1. Fetches subtitles from OpenSubtitles via Stremio's proxy API
+2. Decodes with automatic encoding detection
+3. Parses SRT format and extracts timing data
+4. Merges based on timestamp overlap
+5. Outputs combined SRT with primary + secondary lines
+
+### Supported Encodings
+
+- UTF-8, UTF-16 LE/BE (with BOM detection)
+- Windows codepages (1250-1258)
+- ISO-8859 variants (1-15)
+- Double-encoded UTF-8
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/configure` | Landing page |
+| `/manifest.json` | Addon manifest |
+| `/:config/manifest.json` | Configured manifest |
+| `/:config/subtitles/:type/:id.json` | Subtitle list |
+| `/subs/:params.srt` | Subtitle file |
+| `/health` | Health check |
+| `/stats` | Analytics (requires key) |
+| `/robots.txt` | SEO robots file |
+| `/sitemap.xml` | SEO sitemap |
+
+---
+
+## Usage Tips
+
+**For effective language learning:**
+
+- Set the language you're learning as PRIMARY (top position)
+- Read the primary subtitle first, then check the translation
+- TV series work well due to consistent vocabulary
+- Animated content often has clearer pronunciation
+
+---
+
+## Troubleshooting
+
+**Subtitles not appearing?**
+- Verify both languages have subtitles available for that content
+- Try different content - not all movies have all languages
+- Clear Stremio cache and reinstall the addon
+
+**Encoding issues?**
+- The addon auto-detects encoding for most files
+- Report problematic content with the title for investigation
+
+**Network issues?**
+- Check firewall settings for port 7000
+- Ensure `EXTERNAL_URL` matches your network configuration
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/name`)
+3. Commit changes (`git commit -m 'Add feature'`)
+4. Push to branch (`git push origin feature/name`)
+5. Open a Pull Request
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## Credits
+
+- Subtitles provided by [OpenSubtitles](https://www.opensubtitles.org/)
+- Built with [Stremio Addon SDK](https://github.com/Stremio/stremio-addon-sdk)
+- Inspired by [Strelingo Addon](https://github.com/Serkali-sudo/strelingo-addon)
