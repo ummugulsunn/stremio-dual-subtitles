@@ -180,8 +180,17 @@ app.get('/configure', (req, res) => {
   res.send(html);
 });
 
-// Analytics dashboard
+// Analytics dashboard (protected with secret key)
 app.get('/stats', (req, res) => {
+  const analyticsSecret = process.env.ANALYTICS_SECRET;
+  
+  // If secret is set, require it in query parameter
+  if (analyticsSecret && req.query.key !== analyticsSecret) {
+    const baseUrl = getExternalUrl(req);
+    const manifestWithLogo = getManifestWithLogo(req);
+    return res.status(401).send(generateErrorHTML(401, 'Unauthorized', baseUrl, manifestWithLogo));
+  }
+  
   const baseUrl = getExternalUrl(req);
   const manifestWithLogo = getManifestWithLogo(req);
   const stats = getAnalyticsSummary();

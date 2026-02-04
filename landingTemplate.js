@@ -775,7 +775,7 @@ function generateLandingHTML(manifest, baseUrl) {
       <a href="#features">Features</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#faq">FAQ</a>
-      <a href="${baseUrl}/stats" class="nav-btn">Analytics</a>
+      <a href="https://github.com/ummugulsunn/stremio-dual-subtitles" target="_blank" class="nav-btn">GitHub</a>
     </div>
   </nav>
 
@@ -1036,7 +1036,6 @@ function generateLandingHTML(manifest, baseUrl) {
     <div class="footer-links">
       <a href="https://github.com/ummugulsunn/stremio-dual-subtitles" target="_blank">GitHub</a>
       <a href="${baseUrl}/privacy">Privacy Policy</a>
-      <a href="${baseUrl}/stats">Analytics</a>
       <a href="https://www.stremio.com/" target="_blank">Get Stremio</a>
     </div>
     <div class="footer-copyright">
