@@ -525,9 +525,9 @@ async function subtitlesHandler({ type, id, extra, config }) {
       return { subtitles: [] };
     }
 
-    // Process translations (up to 3 versions)
+    // Process translations (1 version for speed - serverless optimization)
     for (const transSubInfo of transSubList) {
-      if (finalSubtitles.length >= 3) break;
+      if (finalSubtitles.length >= 1) break;
       if (usedTransUrls.has(transSubInfo.url)) continue;
       usedTransUrls.add(transSubInfo.url);
 
@@ -564,10 +564,10 @@ async function subtitlesHandler({ type, id, extra, config }) {
       ].join('/');
 
       finalSubtitles.push({
-        id: `dual-${selectedMainSub.id}-${transSubInfo.id}-v${version}`,
+        id: `dual-${selectedMainSub.id}-${transSubInfo.id}`,
         url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
         lang: `${mainLang}+${transLang}`,
-        SubtitlesName: `🌍 ${getLanguageName(mainLang)} + ${getLanguageName(transLang)} (v${version})`
+        SubtitlesName: `🌍 ${getLanguageName(mainLang)} + ${getLanguageName(transLang)}`
       });
     }
 
