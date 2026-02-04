@@ -5,8 +5,12 @@
  * Serves the addon with configuration support and subtitle caching.
  */
 
-// Load environment variables
-require('dotenv').config();
+// Load environment variables (optional in production)
+try {
+  require('dotenv').config();
+} catch (e) {
+  // dotenv not needed in Vercel
+}
 
 const express = require('express');
 const { getRouter } = require('stremio-addon-sdk');
