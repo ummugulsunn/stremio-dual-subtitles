@@ -1179,6 +1179,9 @@ function generateLandingHTML(manifest, baseUrl) {
       body: JSON.stringify({ event: 'pageView', page: 'landing' })
     }).catch(() => {});
   </script>
+  
+  <!-- Vercel Analytics -->
+  <script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>`;
 }
