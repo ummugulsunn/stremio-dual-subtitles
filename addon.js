@@ -4,10 +4,14 @@
  * Perfect for language learners who want to see both original and translation.
  */
 
+// Enable module aliases (for "@/lib/*")
+require('module-alias/register');
+
 const { addonBuilder } = require('stremio-addon-sdk');
 const axios = require('axios');
 const pako = require('pako');
 const sanitize = require('sanitize-html');
+const { debugServer, sanitizeForLogging } = require('@/lib/debug');
 /**
  * Simple SRT parser (more reliable than external libraries)
  */
@@ -97,7 +101,7 @@ const manifest = {
   types: ['movie', 'series'],
   idPrefixes: ['tt'],
   catalogs: [],
-  logo: 'https://raw.githubusercontent.com/Serkali-sudo/strelingo-addon/main/assets/strelingo_icon.jpg',
+  logo: '/logo.png',
   behaviorHints: {
     configurable: true,
     configurationRequired: true
@@ -123,6 +127,19 @@ const manifest = {
 };
 
 const builder = new addonBuilder(manifest);
+
+async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
+  try {
+    return await axios.get(url, options);
+  } catch (error) {
+    const status = error && error.response ? error.response.status : null;
+    if (retries > 0 && (status === 429 || status === 503 || status === 504)) {
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+      return fetchWithRetry(url, options, retries - 1, backoffMs * 2);
+    }
+    throw error;
+  }
+}
 
 /**
  * Fetch all subtitles from OpenSubtitles API.
@@ -150,7 +167,7 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
   apiUrl += '.json';
 
   try {
-    const response = await axios.get(apiUrl, { timeout: 15000 });
+    const response = await fetchWithRetry(apiUrl, { timeout: 15000 });
     
     if (!response.data || !response.data.subtitles || response.data.subtitles.length === 0) {
       return null;
@@ -158,7 +175,7 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
 
     return response.data.subtitles;
   } catch (error) {
-    console.error('Error fetching subtitles:', error.message);
+    debugServer.error('Error fetching subtitles:', sanitizeForLogging(error.message));
     return null;
   }
 }
@@ -191,7 +208,7 @@ function filterSubtitlesByLanguage(allSubtitles, languageId) {
  */
 async function fetchSubtitleContent(url, languageCode = null) {
   try {
-    const response = await axios.get(url, {
+    const response = await fetchWithRetry(url, {
       responseType: 'arraybuffer',
       timeout: 15000,
       maxContentLength: 5 * 1024 * 1024 // 5MB limit
@@ -204,7 +221,7 @@ async function fetchSubtitleContent(url, languageCode = null) {
       try {
         buffer = Buffer.from(pako.ungzip(buffer));
       } catch (e) {
-        console.error('Error decompressing gzip:', e.message);
+        debugServer.error('Error decompressing gzip:', sanitizeForLogging(e.message));
         return null;
       }
     }
@@ -212,7 +229,7 @@ async function fetchSubtitleContent(url, languageCode = null) {
     const text = decodeSubtitleBuffer(buffer, languageCode);
     return text;
   } catch (error) {
-    console.error('Error fetching subtitle:', error.message);
+    debugServer.error('Error fetching subtitle:', sanitizeForLogging(error.message));
     return null;
   }
 }
@@ -261,7 +278,7 @@ function parseSrt(srtText) {
 
     return filtered;
   } catch (error) {
-    console.error('Error parsing SRT:', error.message);
+    debugServer.error('Error parsing SRT:', sanitizeForLogging(error.message));
     return null;
   }
 }
@@ -365,7 +382,7 @@ function formatSrt(subtitleArray) {
   try {
     return formatSrtSimple(subtitleArray);
   } catch (error) {
-    console.error('Error formatting SRT:', error.message);
+    debugServer.error('Error formatting SRT:', sanitizeForLogging(error.message));
     return null;
   }
 }
@@ -411,7 +428,7 @@ function getSubtitle(key) {
 
 // Subtitle handler function
 async function subtitlesHandler({ type, id, extra, config }) {
-  console.log('Subtitle request:', { type, id });
+  debugServer.log('Subtitle request:', sanitizeForLogging({ type, id }));
 
   // Get configured languages
   const mainLangRaw = config?.mainLang || 'English [eng]';
@@ -420,11 +437,11 @@ async function subtitlesHandler({ type, id, extra, config }) {
   const mainLang = parseLangCode(mainLangRaw);
   const transLang = parseLangCode(transLangRaw);
 
-  console.log(`Languages: Primary=${mainLang}, Secondary=${transLang}`);
+  debugServer.log(`Languages: Primary=${mainLang}, Secondary=${transLang}`);
 
   // Prevent same language selection
   if (mainLang === transLang) {
-    console.log('Error: Same language selected for both');
+    debugServer.warn('Error: Same language selected for both');
     return { subtitles: [] };
   }
 
@@ -445,7 +462,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
   imdbId = imdbId.replace('tt', '');
 
   if (!imdbId) {
-    console.log('No valid IMDB ID');
+    debugServer.warn('No valid IMDB ID');
     return { subtitles: [] };
   }
 
@@ -458,31 +475,31 @@ async function subtitlesHandler({ type, id, extra, config }) {
     };
 
     // Fetch all subtitles
-    console.log('Fetching subtitles from OpenSubtitles...');
+    debugServer.log('Fetching subtitles from OpenSubtitles...');
     const allSubtitles = await fetchAllSubtitles(imdbId, type, season, episode, videoParams);
 
     if (!allSubtitles) {
-      console.log('No subtitles found');
+      debugServer.warn('No subtitles found');
       return { subtitles: [] };
     }
 
-    console.log(`Found ${allSubtitles.length} total subtitles`);
+    debugServer.log(`Found ${allSubtitles.length} total subtitles`);
 
     // Filter by languages
     const mainSubList = filterSubtitlesByLanguage(allSubtitles, mainLang);
     const transSubList = filterSubtitlesByLanguage(allSubtitles, transLang);
 
     if (!mainSubList || mainSubList.length === 0) {
-      console.log(`No ${mainLang} subtitles found`);
+      debugServer.warn(`No ${mainLang} subtitles found`);
       return { subtitles: [] };
     }
 
     if (!transSubList || transSubList.length === 0) {
-      console.log(`No ${transLang} subtitles found`);
+      debugServer.warn(`No ${transLang} subtitles found`);
       return { subtitles: [] };
     }
 
-    console.log(`Found ${mainSubList.length} ${mainLang} and ${transSubList.length} ${transLang} subtitles`);
+    debugServer.log(`Found ${mainSubList.length} ${mainLang} and ${transSubList.length} ${transLang} subtitles`);
 
     // Process and create merged subtitles
     const finalSubtitles = [];
@@ -501,12 +518,12 @@ async function subtitlesHandler({ type, id, extra, config }) {
 
       mainParsed = parsed;
       selectedMainSub = mainSubInfo;
-      console.log(`Using main subtitle: ${mainSubInfo.id}`);
+      debugServer.log(`Using main subtitle: ${mainSubInfo.id}`);
       break;
     }
 
     if (!mainParsed) {
-      console.log('Could not process any main subtitle');
+      debugServer.warn('Could not process any main subtitle');
       return { subtitles: [] };
     }
 
@@ -517,7 +534,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
       usedTransUrls.add(transSubInfo.url);
 
       const version = finalSubtitles.length + 1;
-      console.log(`Processing translation v${version}...`);
+      debugServer.log(`Processing translation v${version}...`);
 
       const transContent = await fetchSubtitleContent(transSubInfo.url, transSubInfo.lang);
       if (!transContent) continue;
@@ -544,7 +561,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
       });
     }
 
-    console.log(`Created ${finalSubtitles.length} merged subtitle(s)`);
+    debugServer.log(`Created ${finalSubtitles.length} merged subtitle(s)`);
 
     return {
       subtitles: finalSubtitles,
@@ -552,7 +569,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
     };
 
   } catch (error) {
-    console.error('Error in subtitle handler:', error.message);
+    debugServer.error('Error in subtitle handler:', sanitizeForLogging(error.message));
     return { subtitles: [] };
   }
 }

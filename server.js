@@ -5,6 +5,9 @@
  * Serves the addon with configuration support and subtitle caching.
  */
 
+// Enable module aliases (for "@/lib/*")
+require('module-alias/register');
+
 // Load environment variables (optional in production)
 try {
   require('dotenv').config();
@@ -14,6 +17,7 @@ try {
 
 const express = require('express');
 const { getRouter } = require('stremio-addon-sdk');
+const { debugServer, sanitizeForLogging } = require('@/lib/debug');
 const { builder, manifest, getSubtitle, subtitlesHandler } = require('./addon');
 const generateLandingHTML = require('./landingTemplate');
 const { parseLangCode } = require('./languages');
@@ -51,8 +55,44 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+    debugServer.log(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
   });
+  next();
+});
+
+// Serve static files
+app.use(express.static('public'));
+
+// Basic rate limiter (per IP)
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 60);
+const rateLimitStore = new Map();
+
+app.use((req, res, next) => {
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+    .toString()
+    .split(',')[0]
+    .trim();
+  const now = Date.now();
+
+  if (!rateLimitStore.has(ip)) {
+    rateLimitStore.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+
+  const entry = rateLimitStore.get(ip);
+  if (now > entry.resetAt) {
+    entry.count = 1;
+    entry.resetAt = now + RATE_LIMIT_WINDOW_MS;
+    return next();
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    res.status(429).json({ error: 'Too many requests' });
+    return;
+  }
+
+  entry.count += 1;
   next();
 });
 
@@ -69,11 +109,12 @@ app.get('/subtitles/:filename', (req, res) => {
   const content = getSubtitle(cacheKey);
   
   if (!content) {
-    console.log(`Subtitle not found in cache: ${cacheKey}`);
+    debugServer.warn(`Subtitle not found in cache: ${cacheKey}`);
     return res.status(404).send('Subtitle not found or expired');
   }
   
   res.setHeader('Content-Type', 'text/srt; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=21600');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   res.send(content);
 });
@@ -85,7 +126,11 @@ app.get('/', (req, res) => {
 
 app.get('/configure', (req, res) => {
   const baseUrl = getExternalUrl(req);
-  const html = generateLandingHTML(manifest, baseUrl);
+  const manifestWithLogo = {
+    ...manifest,
+    logo: manifest.logo.startsWith('http') ? manifest.logo : `${baseUrl}${manifest.logo}`
+  };
+  const html = generateLandingHTML(manifestWithLogo, baseUrl);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(html);
 });
@@ -108,11 +153,14 @@ app.get('/:config/manifest.json', (req, res) => {
     const mainCode = parseLangCode(mainLang);
     const transCode = parseLangCode(transLang);
 
+    const baseUrl = getExternalUrl(req);
+
     // Create configured manifest
     const configuredManifest = {
       ...manifest,
       id: `${manifest.id}.${mainCode}.${transCode}`,
       name: `${manifest.name} (${mainCode.toUpperCase()}+${transCode.toUpperCase()})`,
+      logo: manifest.logo.startsWith('http') ? manifest.logo : `${baseUrl}${manifest.logo}`,
       behaviorHints: {
         ...manifest.behaviorHints,
         configurationRequired: false
@@ -121,7 +169,7 @@ app.get('/:config/manifest.json', (req, res) => {
 
     res.json(configuredManifest);
   } catch (error) {
-    console.error('Error generating manifest:', error.message);
+    debugServer.error('Error generating manifest:', sanitizeForLogging(error.message));
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -145,7 +193,7 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
       transLang
     };
 
-    console.log(`Subtitle request: ${type}/${id}, langs: ${parseLangCode(mainLang)}+${parseLangCode(transLang)}`);
+    debugServer.log(`Subtitle request: ${type}/${id}, langs: ${parseLangCode(mainLang)}+${parseLangCode(transLang)}`);
 
     // Call the subtitle handler directly
     const result = await subtitlesHandler({ type, id, extra, config });
@@ -161,7 +209,7 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error handling subtitle request:', error.message, error.stack);
+    debugServer.error('Error handling subtitle request:', sanitizeForLogging(error.message));
     res.json({ subtitles: [] });
   }
 });
@@ -197,7 +245,12 @@ function parseExtra(extraStr) {
 
 // Default manifest (without config - redirects to configure)
 app.get('/manifest.json', (req, res) => {
-  res.json(manifest);
+  const baseUrl = getExternalUrl(req);
+  const manifestWithLogo = {
+    ...manifest,
+    logo: manifest.logo.startsWith('http') ? manifest.logo : `${baseUrl}${manifest.logo}`
+  };
+  res.json(manifestWithLogo);
 });
 
 // Mount addon routes for non-configured requests
@@ -206,24 +259,17 @@ app.use(getRouter(addonInterface));
 
 // Error handling
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  debugServer.error('Server error:', sanitizeForLogging(err && err.message ? err.message : err));
   res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start server only if not running on Vercel (Vercel handles this automatically)
 if (!process.env.VERCEL) {
   app.listen(PORT, HOST, () => {
-    console.log('');
-    console.log('╔══════════════════════════════════════════════════════════════╗');
-    console.log('║              🌍 Dual Subtitles Addon Started 🌍              ║');
-    console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log(`║  Local:     http://localhost:${PORT}/configure`);
-    console.log(`║  Network:   http://${HOST === '0.0.0.0' ? '<your-ip>' : HOST}:${PORT}/configure`);
-    console.log(`║  Manifest:  http://localhost:${PORT}/manifest.json`);
-    console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log('║  Open the configure URL in your browser to get started!      ║');
-    console.log('╚══════════════════════════════════════════════════════════════╝');
-    console.log('');
+    debugServer.log('Dual Subtitles Addon Started');
+    debugServer.log(`Local: http://localhost:${PORT}/configure`);
+    debugServer.log(`Network: http://${HOST === '0.0.0.0' ? '<your-ip>' : HOST}:${PORT}/configure`);
+    debugServer.log(`Manifest: http://localhost:${PORT}/manifest.json`);
   });
 }
 

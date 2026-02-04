@@ -98,6 +98,10 @@ cp .env.example .env
 | `HOST` | `0.0.0.0` | Host to bind to |
 | `EXTERNAL_URL` | auto | External URL for remote access |
 | `ADDON_NAME` | `Dual Subtitles` | Custom addon name |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window per IP |
+| `RATE_LIMIT_MAX` | `60` | Max requests per IP in window |
+| `DEBUG_MODE` | `false` | Server debug logging |
+| `NEXT_PUBLIC_DEBUG_MODE` | `false` | Debug logging toggle |
 
 ### Remote Access
 
