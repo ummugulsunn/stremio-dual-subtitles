@@ -17,24 +17,50 @@ function generateLandingHTML(manifest, baseUrl) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${manifest.name} - Learn Languages While Watching</title>
+  <title>${manifest.name} - Learn Languages While Watching Movies & TV Shows</title>
   
   <!-- SEO Meta Tags -->
-  <meta name="description" content="${manifest.description}">
-  <meta name="keywords" content="stremio, addon, dual subtitles, language learning, subtitles, movies, series">
+  <meta name="description" content="Learn languages naturally by watching movies and TV shows with dual subtitles. Display two languages simultaneously - perfect for language learners. Free Stremio addon with 70+ languages.">
+  <meta name="keywords" content="stremio addon, dual subtitles, language learning, bilingual subtitles, learn english, learn spanish, learn german, learn french, learn turkish, movie subtitles, tv series subtitles, stremio plugin, two language subtitles, subtitle translator, language immersion">
+  <meta name="author" content="Dual Subtitles">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#7c3aed">
+  <link rel="canonical" href="${baseUrl}/configure">
   
   <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="${baseUrl}">
-  <meta property="og:title" content="${manifest.name} - Learn Languages While Watching">
-  <meta property="og:description" content="${manifest.description}">
+  <meta property="og:url" content="${baseUrl}/configure">
+  <meta property="og:title" content="${manifest.name} - Learn Languages While Watching Movies">
+  <meta property="og:description" content="Watch movies and TV shows with dual subtitles. Display two languages at once - perfect for language learning. Free Stremio addon with 70+ languages.">
   <meta property="og:image" content="${manifest.logo}">
+  <meta property="og:site_name" content="Dual Subtitles">
+  <meta property="og:locale" content="en_US">
   
   <!-- Twitter -->
-  <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:title" content="${manifest.name}">
-  <meta property="twitter:description" content="${manifest.description}">
-  <meta property="twitter:image" content="${manifest.logo}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${manifest.name} - Learn Languages While Watching">
+  <meta name="twitter:description" content="Watch movies and TV shows with dual subtitles. Display two languages at once - perfect for language learning!">
+  <meta name="twitter:image" content="${manifest.logo}">
+  <meta name="twitter:creator" content="@dualsubtitles">
+  
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "${manifest.name}",
+    "description": "Learn languages naturally by watching movies and TV shows with dual subtitles.",
+    "url": "${baseUrl}",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "Windows, macOS, Linux, Android, iOS",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": ["70+ languages", "Dual subtitle display", "Movies and TV series", "Free to use"]
+  }
+  </script>
   
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="${manifest.logo}">
