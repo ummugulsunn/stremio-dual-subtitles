@@ -4,14 +4,12 @@
  * Perfect for language learners who want to see both original and translation.
  */
 
-// Enable module aliases (for "@/lib/*")
-require('module-alias/register');
-
+const path = require('path');
 const { addonBuilder } = require('stremio-addon-sdk');
 const axios = require('axios');
 const pako = require('pako');
 const sanitize = require('sanitize-html');
-const { debugServer, sanitizeForLogging } = require('@/lib/debug');
+const { debugServer, sanitizeForLogging } = require('./lib/debug');
 /**
  * Simple SRT parser (more reliable than external libraries)
  */

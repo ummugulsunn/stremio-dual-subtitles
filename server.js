@@ -5,19 +5,10 @@
  * Serves the addon with configuration support and subtitle caching.
  */
 
-// Enable module aliases (for "@/lib/*")
-require('module-alias/register');
-
-// Load environment variables (optional in production)
-try {
-  require('dotenv').config();
-} catch (e) {
-  // dotenv not needed in Vercel
-}
-
+const path = require('path');
 const express = require('express');
 const { getRouter } = require('stremio-addon-sdk');
-const { debugServer, sanitizeForLogging } = require('@/lib/debug');
+const { debugServer, sanitizeForLogging } = require('./lib/debug');
 const { builder, manifest, getSubtitle, subtitlesHandler } = require('./addon');
 const generateLandingHTML = require('./landingTemplate');
 const { parseLangCode } = require('./languages');
@@ -61,7 +52,7 @@ app.use((req, res, next) => {
 });
 
 // Serve static files
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Basic rate limiter (per IP)
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
