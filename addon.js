@@ -104,6 +104,10 @@ const manifest = {
     configurable: true,
     configurationRequired: true
   },
+  stremioAddonsConfig: {
+    issuer: 'https://stremio-addons.net',
+    signature: 'eyJhbGciOiJkaXIiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0..0dhMmLAGB8GgrgR0k_QVag.QvSVlwg-SctRXOgQgdIhydZx55LSndygGe4uCb2VrwGzHfQm5hyH0j3BxQOMrMZWuBxFkMkVYt9QF4jNx6yyffbx1ub8KJCjnKl9SfBCkI9aFk9RrD7T0FbuPurxIbrd.OH-8gvJWWzw6O7QtreVs_w'
+  },
   config: [
     {
       key: 'mainLang',
