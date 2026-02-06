@@ -364,8 +364,8 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
       transLang
     };
 
-    // Track subtitle request
-    trackSubtitleRequest(parseLangCode(mainLang), parseLangCode(transLang), type);
+    // Track subtitle request (with content ID for popular content stats)
+    trackSubtitleRequest(parseLangCode(mainLang), parseLangCode(transLang), type, id);
 
     debugServer.log(`Subtitle request: ${type}/${id}, langs: ${parseLangCode(mainLang)}+${parseLangCode(transLang)}`);
 
