@@ -151,12 +151,6 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
 
   if (type === 'series' && season && episode) {
     apiUrl += `:${season}:${episode}`;
-  } else {
-    // Use video hash for better matching if possible, else, 
-    // do nothing as that will cause the API to return old unusable subtitles (from subs-v1.strem.io)
-    if (videoParams.videoHash) {
-      apiUrl += `:${videoParams.videoHash}`;
-    }
   }
 
   // Add query params for better matching
@@ -170,6 +164,8 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
   }
 
   apiUrl += '.json';
+
+  console.log('Fetching subtitles from:', apiUrl);
 
   try {
     const response = await fetchWithRetry(apiUrl, { timeout: 15000 });
