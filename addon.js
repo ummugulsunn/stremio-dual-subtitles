@@ -17,10 +17,10 @@ function parseSrtSimple(srtText) {
   const lines = srtText.trim().split('\n');
   const subtitles = [];
   let current = null;
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
+
     // Skip empty lines
     if (!line) {
       if (current && current.text) {
@@ -29,13 +29,13 @@ function parseSrtSimple(srtText) {
       }
       continue;
     }
-    
+
     // Check if it's a sequence number
     if (!current && /^\d+$/.test(line)) {
       current = { id: line, text: '' };
       continue;
     }
-    
+
     // Check if it's a timestamp line
     if (current && !current.startTime && line.includes('-->')) {
       const [start, end] = line.split('-->').map(s => s.trim());
@@ -43,19 +43,19 @@ function parseSrtSimple(srtText) {
       current.endTime = end;
       continue;
     }
-    
+
     // Otherwise it's text
     if (current && current.startTime) {
       if (current.text) current.text += '\n';
       current.text += line;
     }
   }
-  
+
   // Add last subtitle if exists
   if (current && current.text) {
     subtitles.push(current);
   }
-  
+
   return subtitles;
 }
 
@@ -64,7 +64,7 @@ function parseSrtSimple(srtText) {
  */
 function formatSrtSimple(subtitles) {
   const lines = [];
-  
+
   for (let i = 0; i < subtitles.length; i++) {
     const sub = subtitles[i];
     lines.push(String(i + 1));
@@ -72,17 +72,17 @@ function formatSrtSimple(subtitles) {
     lines.push(sub.text);
     lines.push('');
   }
-  
+
   return lines.join('\n');
 }
 
 const { decodeSubtitleBuffer, getLanguageAliases } = require('./encoding');
-const { 
-  languageMap, 
-  getLanguageOptions, 
-  extractBrowserLanguage, 
+const {
+  languageMap,
+  getLanguageOptions,
+  extractBrowserLanguage,
   parseLangCode,
-  getLanguageName 
+  getLanguageName
 } = require('./languages');
 
 // Configuration
@@ -135,7 +135,7 @@ async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
     return await axios.get(url, options);
   } catch (error) {
     const status = error && error.response ? error.response.status : null;
-    if (retries > 0 && (status === 429 || status === 503 || status === 504)) {
+    if (retries > 0 && (status === 429 || status === 469 || status === 503 || status === 504)) {
       await new Promise(resolve => setTimeout(resolve, backoffMs));
       return fetchWithRetry(url, options, retries - 1, backoffMs * 2);
     }
@@ -152,8 +152,11 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
   if (type === 'series' && season && episode) {
     apiUrl += `:${season}:${episode}`;
   } else {
-    // Use video hash for better matching, or 0 to trigger full API
-    apiUrl += `:${videoParams.videoHash || '0'}`;
+    // Use video hash for better matching if possible, else, 
+    // do nothing as that will cause the API to return old unusable subtitles (from subs-v1.strem.io)
+    if (videoParams.videoHash) {
+      apiUrl += `:${videoParams.videoHash}`;
+    }
   }
 
   // Add query params for better matching
@@ -161,16 +164,16 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
   if (videoParams.filename) queryParams.push(`filename=${encodeURIComponent(videoParams.filename)}`);
   if (videoParams.videoSize) queryParams.push(`videoSize=${videoParams.videoSize}`);
   if (videoParams.videoHash) queryParams.push(`videoHash=${videoParams.videoHash}`);
-  
+
   if (queryParams.length > 0) {
     apiUrl += `/${queryParams.join('&')}`;
   }
-  
+
   apiUrl += '.json';
 
   try {
     const response = await fetchWithRetry(apiUrl, { timeout: 15000 });
-    
+
     if (!response.data || !response.data.subtitles || response.data.subtitles.length === 0) {
       return null;
     }
@@ -215,6 +218,14 @@ async function fetchSubtitleContent(url, languageCode = null) {
       timeout: 15000,
       maxContentLength: 5 * 1024 * 1024 // 5MB limit
     });
+
+    // Check response's file name. If it contains [Ff]orced, ignore, 
+    // as those are usually for signs and songs only, not full subtitles
+    if (response.headers['content-disposition']) {
+      if (response.headers['content-disposition'].toLowerCase().includes('forced') && languageCode === 'eng') {
+        return null;
+      }
+    }
 
     let buffer = Buffer.from(response.data);
 
@@ -261,20 +272,20 @@ function parseSrt(srtText) {
   try {
     // Normalize line endings
     srtText = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
+
     // Remove BOM if present
     if (srtText.charCodeAt(0) === 0xFEFF) {
       srtText = srtText.substring(1);
     }
-    
+
     // Use simple parser
     const parsed = parseSrtSimple(srtText);
-    
+
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
 
     // Filter out ads
     const adKeywords = ['OpenSubtitles.org', 'OpenSubtitles.com', 'osdb.link', 'Advertise your'];
-    const filtered = parsed.filter(sub => 
+    const filtered = parsed.filter(sub =>
       !adKeywords.some(keyword => (sub.text || '').includes(keyword))
     );
 
@@ -419,12 +430,12 @@ function storeSubtitle(key, srtContent) {
 function getSubtitle(key) {
   const entry = subtitleCache.get(key);
   if (!entry) return null;
-  
+
   if (Date.now() - entry.timestamp > CACHE_TTL) {
     subtitleCache.delete(key);
     return null;
   }
-  
+
   return entry.content;
 }
 
@@ -601,9 +612,9 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
   try {
     // Fetch all subtitles
     const allSubtitles = await fetchAllSubtitles(
-      imdbId, 
-      type, 
-      season !== '0' ? season : null, 
+      imdbId,
+      type,
+      season !== '0' ? season : null,
       episode !== '0' ? episode : null
     );
 
@@ -621,7 +632,7 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
       // Fallback: get best match by language
       const mainSubList = filterSubtitlesByLanguage(allSubtitles, mainLang);
       const transSubList = filterSubtitlesByLanguage(allSubtitles, transLang);
-      
+
       if (!mainSubList || !transSubList) {
         return null;
       }
@@ -667,7 +678,7 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
 
     const srtContent = formatSrt(merged);
     debugServer.log(`Generated ${merged.length} merged subtitle entries`);
-    
+
     return srtContent;
   } catch (error) {
     debugServer.error('Error generating dynamic subtitle:', sanitizeForLogging(error.message));
