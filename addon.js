@@ -97,7 +97,7 @@ const manifest = {
   description: 'Watch movies and series with dual subtitles - see two languages simultaneously for better language learning!',
   resources: ['subtitles'],
   types: ['movie', 'series'],
-  idPrefixes: ['tt'],
+  idPrefixes: ['tt', 'kitsu'],
   catalogs: [],
   logo: '/logo.png',
   behaviorHints: {
@@ -128,6 +128,11 @@ const manifest = {
   ]
 };
 
+const MovieType = {
+  IMDB: 'imdb',
+  KITSU: 'kitsu'
+}
+
 const builder = new addonBuilder(manifest);
 
 async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
@@ -146,8 +151,13 @@ async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
 /**
  * Fetch all subtitles from OpenSubtitles API.
  */
-async function fetchAllSubtitles(imdbId, type, season = null, episode = null, videoParams = {}) {
-  let apiUrl = `https://opensubtitles-v3.strem.io/subtitles/${type}/tt${imdbId}`;
+async function fetchAllSubtitles(id, movieType, type, season = null, episode = null, videoParams = {}) {
+  let apiUrl = '';
+  if (movieType === MovieType.IMDB) {
+    apiUrl = `https://opensubtitles-v3.strem.io/subtitles/${type}/tt${id}`;
+  } else if (movieType === MovieType.KITSU) {
+    apiUrl = `https://anime-kitsu.strem.fun/subtitles/movie/${id}`;
+  }
 
   if (type === 'series' && season && episode) {
     apiUrl += `:${season}:${episode}`;
@@ -164,8 +174,6 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
   }
 
   apiUrl += '.json';
-
-  console.log('Fetching subtitles from:', apiUrl);
 
   try {
     const response = await fetchWithRetry(apiUrl, { timeout: 15000 });
@@ -454,25 +462,35 @@ async function subtitlesHandler({ type, id, extra, config }) {
     return { subtitles: [] };
   }
 
-  // Parse IMDB ID
-  let imdbId = extra?.imdbId || id;
-  let season = extra?.season;
-  let episode = extra?.episode;
+  let movieType = MovieType.IMDB;
 
-  if (imdbId.includes(':')) {
-    const parts = imdbId.split(':');
-    imdbId = parts[0];
-    if (parts.length >= 3) {
-      season = season || parts[1];
-      episode = episode || parts[2];
-    }
+  if (id.startsWith('kitsu')) {
+    movieType = MovieType.KITSU;
   }
 
-  imdbId = imdbId.replace('tt', '');
+  let season;
+  let episode;
 
-  if (!imdbId) {
-    debugServer.warn('No valid IMDB ID');
-    return { subtitles: [] };
+  if (movieType === MovieType.IMDB) {
+    // Parse IMDB ID
+    id = extra?.imdbId || id;
+    season = extra?.season;
+    episode = extra?.episode;
+
+    if (id.includes(':')) {
+      const parts = id.split(':');
+      id = parts[0];
+      if (parts.length >= 3) {
+        season = season || parts[1];
+        episode = episode || parts[2];
+      }
+    }
+    id = id.replace('tt', '');
+
+    if (!id) {
+      debugServer.warn('No valid IMDB ID');
+      return { subtitles: [] };
+    }
   }
 
   try {
@@ -485,7 +503,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
 
     // Fetch all subtitles
     debugServer.log('Fetching subtitles from OpenSubtitles...');
-    const allSubtitles = await fetchAllSubtitles(imdbId, type, season, episode, videoParams);
+    const allSubtitles = await fetchAllSubtitles(id, movieType, type, season, episode, videoParams);
 
     if (!allSubtitles) {
       debugServer.warn('No subtitles found');
@@ -559,13 +577,13 @@ async function subtitlesHandler({ type, id, extra, config }) {
       if (!mergedSrt) continue;
 
       // Store in cache (for local/backup)
-      const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v${version}`;
+      const cacheKey = `${id}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v${version}`;
       storeSubtitle(cacheKey, mergedSrt);
 
       // Use dynamic URL that regenerates subtitle on each request (for serverless)
       const dynamicParams = [
         type,
-        imdbId,
+        id,
         season || '0',
         episode || '0',
         mainLang,
@@ -602,13 +620,19 @@ builder.defineSubtitlesHandler(subtitlesHandler);
  * Generate merged subtitle dynamically (for serverless environments)
  * Called directly by URL - no cache dependency
  */
-async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId) {
-  debugServer.log('Dynamic subtitle generation:', { type, imdbId, mainLang, transLang });
+async function generateDynamicSubtitle(type, id, season, episode, mainLang, transLang, mainSubId, transSubId) {
+  debugServer.log('Dynamic subtitle generation:', { type, id, mainLang, transLang });
+
+  let movieType = MovieType.IMDB;
+  if (id.startsWith('kitsu')) {
+    movieType = MovieType.KITSU;
+  }
 
   try {
     // Fetch all subtitles
     const allSubtitles = await fetchAllSubtitles(
-      imdbId,
+      id,
+      movieType,
       type,
       season !== '0' ? season : null,
       episode !== '0' ? episode : null
