@@ -10,12 +10,12 @@ const express = require('express');
 const compression = require('compression');
 const { getRouter } = require('stremio-addon-sdk');
 const { debugServer, sanitizeForLogging } = require('./lib/debug');
-const { 
-  trackPageView, 
-  trackInstall, 
-  trackSubtitleRequest, 
+const {
+  trackPageView,
+  trackInstall,
+  trackSubtitleRequest,
   trackSubtitleServed,
-  getAnalyticsSummary 
+  getAnalyticsSummary
 } = require('./lib/analytics');
 const { generateStatsHTML, generatePrivacyHTML, generateErrorHTML } = require('./lib/templates');
 const { builder, manifest, getSubtitle, subtitlesHandler, generateDynamicSubtitle } = require('./addon');
@@ -99,7 +99,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/logo') || req.path === '/health') {
     return next();
   }
-  
+
   const ip = getClientIP(req);
   const now = Date.now();
 
@@ -135,7 +135,7 @@ app.post('/api/track', (req, res) => {
   try {
     const { event, page, mainLang, transLang, contentType } = req.body;
     const ip = getClientIP(req);
-    
+
     switch (event) {
       case 'pageView':
         trackPageView(ip, page);
@@ -147,7 +147,7 @@ app.post('/api/track', (req, res) => {
         trackSubtitleRequest(mainLang, transLang, contentType);
         break;
     }
-    
+
     res.json({ success: true });
   } catch (error) {
     res.json({ success: false });
@@ -156,8 +156,8 @@ app.post('/api/track', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     version: manifest.version,
     uptime: process.uptime()
   });
@@ -183,14 +183,14 @@ app.get('/configure', (req, res) => {
 // Analytics dashboard (protected with secret key)
 app.get('/stats', (req, res) => {
   const analyticsSecret = process.env.ANALYTICS_SECRET;
-  
+
   // If secret is set, require it in query parameter
   if (analyticsSecret && req.query.key !== analyticsSecret) {
     const baseUrl = getExternalUrl(req);
     const manifestWithLogo = getManifestWithLogo(req);
     return res.status(401).send(generateErrorHTML(401, 'Unauthorized', baseUrl, manifestWithLogo));
   }
-  
+
   const baseUrl = getExternalUrl(req);
   const manifestWithLogo = getManifestWithLogo(req);
   const stats = getAnalyticsSummary();
@@ -262,17 +262,17 @@ app.get('/sitemap.xml', (req, res) => {
 app.get('/subtitles/:filename', (req, res) => {
   const filename = req.params.filename;
   const cacheKey = filename.replace('.srt', '');
-  
+
   const content = getSubtitle(cacheKey);
-  
+
   if (!content) {
     debugServer.warn(`Subtitle not found in cache: ${cacheKey}`);
     return res.status(404).send('Subtitle not found or expired');
   }
-  
+
   trackSubtitleServed();
-  
-  res.setHeader('Content-Type', 'text/srt; charset=utf-8');
+
+  res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=21600');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   res.send(content);
@@ -282,22 +282,22 @@ app.get('/subtitles/:filename', (req, res) => {
 // URL format: /subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:transSubId.srt
 app.get('/subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:transSubId.srt', async (req, res) => {
   const { type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId } = req.params;
-  
+
   debugServer.log(`Dynamic subtitle request: ${type}/${imdbId} ${mainLang}+${transLang}`);
-  
+
   try {
     const content = await generateDynamicSubtitle(
       type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId
     );
-    
+
     if (!content) {
       debugServer.warn('Could not generate dynamic subtitle');
       return res.status(404).send('Subtitle generation failed');
     }
-    
+
     trackSubtitleServed();
-    
-    res.setHeader('Content-Type', 'text/srt; charset=utf-8');
+
+    res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('Content-Disposition', `inline; filename="dual_${mainLang}_${transLang}.srt"`);
     res.send(content);
@@ -317,7 +317,7 @@ app.get('/:config/manifest.json', (req, res) => {
   try {
     const configParam = decodeURIComponent(req.params.config);
     const [mainLang, transLang] = configParam.split('|');
-    
+
     if (!mainLang || !transLang) {
       return res.status(400).json({ error: 'Invalid configuration' });
     }
@@ -350,7 +350,7 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
   try {
     const configParam = decodeURIComponent(req.params.config);
     const [mainLang, transLang] = configParam.split('|');
-    
+
     if (!mainLang || !transLang) {
       return res.status(400).json({ subtitles: [] });
     }
@@ -367,7 +367,7 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
     debugServer.log(`Subtitle request: ${type}/${id}, langs: ${parseLangCode(mainLang)}+${parseLangCode(transLang)}`);
 
     const result = await subtitlesHandler({ type, id, extra, config });
-    
+
     // Replace placeholder URL with actual server URL
     const baseUrl = getExternalUrl(req);
     if (result.subtitles) {
@@ -387,10 +387,10 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
 // Parse extra parameters from URL
 function parseExtra(extraStr) {
   const extra = {};
-  
+
   // Handle the format: videoHash.videoSize.filename or just extra params
   const parts = extraStr.split('.');
-  
+
   // Try to parse as key=value pairs
   for (const part of parts) {
     if (part.includes('=')) {
@@ -398,7 +398,7 @@ function parseExtra(extraStr) {
       extra[key] = value;
     }
   }
-  
+
   // Also handle query-style params
   if (extraStr.includes('&')) {
     const params = extraStr.split('&');
@@ -409,7 +409,7 @@ function parseExtra(extraStr) {
       }
     }
   }
-  
+
   return extra;
 }
 
