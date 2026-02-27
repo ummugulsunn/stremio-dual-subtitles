@@ -17,10 +17,10 @@ function parseSrtSimple(srtText) {
   const lines = srtText.trim().split('\n');
   const subtitles = [];
   let current = null;
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
+
     // Skip empty lines
     if (!line) {
       if (current && current.text) {
@@ -29,13 +29,13 @@ function parseSrtSimple(srtText) {
       }
       continue;
     }
-    
+
     // Check if it's a sequence number
     if (!current && /^\d+$/.test(line)) {
       current = { id: line, text: '' };
       continue;
     }
-    
+
     // Check if it's a timestamp line
     if (current && !current.startTime && line.includes('-->')) {
       const [start, end] = line.split('-->').map(s => s.trim());
@@ -43,19 +43,19 @@ function parseSrtSimple(srtText) {
       current.endTime = end;
       continue;
     }
-    
+
     // Otherwise it's text
     if (current && current.startTime) {
       if (current.text) current.text += '\n';
       current.text += line;
     }
   }
-  
+
   // Add last subtitle if exists
   if (current && current.text) {
     subtitles.push(current);
   }
-  
+
   return subtitles;
 }
 
@@ -64,7 +64,7 @@ function parseSrtSimple(srtText) {
  */
 function formatSrtSimple(subtitles) {
   const lines = [];
-  
+
   for (let i = 0; i < subtitles.length; i++) {
     const sub = subtitles[i];
     lines.push(String(i + 1));
@@ -72,17 +72,17 @@ function formatSrtSimple(subtitles) {
     lines.push(sub.text);
     lines.push('');
   }
-  
+
   return lines.join('\n');
 }
 
 const { decodeSubtitleBuffer, getLanguageAliases } = require('./encoding');
-const { 
-  languageMap, 
-  getLanguageOptions, 
-  extractBrowserLanguage, 
+const {
+  languageMap,
+  getLanguageOptions,
+  extractBrowserLanguage,
   parseLangCode,
-  getLanguageName 
+  getLanguageName
 } = require('./languages');
 
 // Configuration
@@ -97,7 +97,7 @@ const manifest = {
   description: 'Watch movies and series with dual subtitles - see two languages simultaneously for better language learning!',
   resources: ['subtitles'],
   types: ['movie', 'series'],
-  idPrefixes: ['tt'],
+  idPrefixes: ['tt', 'kitsu'],
   catalogs: [],
   logo: '/logo.png',
   behaviorHints: {
@@ -128,6 +128,11 @@ const manifest = {
   ]
 };
 
+const MovieType = {
+  IMDB: 'imdb',
+  KITSU: 'kitsu'
+}
+
 const builder = new addonBuilder(manifest);
 
 async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
@@ -135,7 +140,7 @@ async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
     return await axios.get(url, options);
   } catch (error) {
     const status = error && error.response ? error.response.status : null;
-    if (retries > 0 && (status === 429 || status === 503 || status === 504)) {
+    if (retries > 0 && (status === 429 || status === 469 || status === 503 || status === 504)) {
       await new Promise(resolve => setTimeout(resolve, backoffMs));
       return fetchWithRetry(url, options, retries - 1, backoffMs * 2);
     }
@@ -146,14 +151,16 @@ async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
 /**
  * Fetch all subtitles from OpenSubtitles API.
  */
-async function fetchAllSubtitles(imdbId, type, season = null, episode = null, videoParams = {}) {
-  let apiUrl = `https://opensubtitles-v3.strem.io/subtitles/${type}/tt${imdbId}`;
+async function fetchAllSubtitles(id, movieType, type, season = null, episode = null, videoParams = {}) {
+  let apiUrl = '';
+  if (movieType === MovieType.IMDB) {
+    apiUrl = `https://opensubtitles-v3.strem.io/subtitles/${type}/tt${id}`;
+  } else if (movieType === MovieType.KITSU) {
+    apiUrl = `https://anime-kitsu.strem.fun/subtitles/movie/${id}`;
+  }
 
   if (type === 'series' && season && episode) {
     apiUrl += `:${season}:${episode}`;
-  } else {
-    // Use video hash for better matching, or 0 to trigger full API
-    apiUrl += `:${videoParams.videoHash || '0'}`;
   }
 
   // Add query params for better matching
@@ -161,16 +168,16 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
   if (videoParams.filename) queryParams.push(`filename=${encodeURIComponent(videoParams.filename)}`);
   if (videoParams.videoSize) queryParams.push(`videoSize=${videoParams.videoSize}`);
   if (videoParams.videoHash) queryParams.push(`videoHash=${videoParams.videoHash}`);
-  
+
   if (queryParams.length > 0) {
     apiUrl += `/${queryParams.join('&')}`;
   }
-  
+
   apiUrl += '.json';
 
   try {
     const response = await fetchWithRetry(apiUrl, { timeout: 15000 });
-    
+
     if (!response.data || !response.data.subtitles || response.data.subtitles.length === 0) {
       return null;
     }
@@ -215,6 +222,14 @@ async function fetchSubtitleContent(url, languageCode = null) {
       timeout: 15000,
       maxContentLength: 5 * 1024 * 1024 // 5MB limit
     });
+
+    // Check response's file name. If it contains [Ff]orced, ignore, 
+    // as those are usually for signs and songs only, not full subtitles
+    if (response.headers['content-disposition']) {
+      if (response.headers['content-disposition'].toLowerCase().includes('forced') && languageCode === 'eng') {
+        return null;
+      }
+    }
 
     let buffer = Buffer.from(response.data);
 
@@ -261,20 +276,20 @@ function parseSrt(srtText) {
   try {
     // Normalize line endings
     srtText = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
+
     // Remove BOM if present
     if (srtText.charCodeAt(0) === 0xFEFF) {
       srtText = srtText.substring(1);
     }
-    
+
     // Use simple parser
     const parsed = parseSrtSimple(srtText);
-    
+
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
 
     // Filter out ads
     const adKeywords = ['OpenSubtitles.org', 'OpenSubtitles.com', 'osdb.link', 'Advertise your'];
-    const filtered = parsed.filter(sub => 
+    const filtered = parsed.filter(sub =>
       !adKeywords.some(keyword => (sub.text || '').includes(keyword))
     );
 
@@ -419,12 +434,12 @@ function storeSubtitle(key, srtContent) {
 function getSubtitle(key) {
   const entry = subtitleCache.get(key);
   if (!entry) return null;
-  
+
   if (Date.now() - entry.timestamp > CACHE_TTL) {
     subtitleCache.delete(key);
     return null;
   }
-  
+
   return entry.content;
 }
 
@@ -447,25 +462,35 @@ async function subtitlesHandler({ type, id, extra, config }) {
     return { subtitles: [] };
   }
 
-  // Parse IMDB ID
-  let imdbId = extra?.imdbId || id;
-  let season = extra?.season;
-  let episode = extra?.episode;
+  let movieType = MovieType.IMDB;
 
-  if (imdbId.includes(':')) {
-    const parts = imdbId.split(':');
-    imdbId = parts[0];
-    if (parts.length >= 3) {
-      season = season || parts[1];
-      episode = episode || parts[2];
-    }
+  if (id.startsWith('kitsu')) {
+    movieType = MovieType.KITSU;
   }
 
-  imdbId = imdbId.replace('tt', '');
+  let season;
+  let episode;
 
-  if (!imdbId) {
-    debugServer.warn('No valid IMDB ID');
-    return { subtitles: [] };
+  if (movieType === MovieType.IMDB) {
+    // Parse IMDB ID
+    id = extra?.imdbId || id;
+    season = extra?.season;
+    episode = extra?.episode;
+
+    if (id.includes(':')) {
+      const parts = id.split(':');
+      id = parts[0];
+      if (parts.length >= 3) {
+        season = season || parts[1];
+        episode = episode || parts[2];
+      }
+    }
+    id = id.replace('tt', '');
+
+    if (!id) {
+      debugServer.warn('No valid IMDB ID');
+      return { subtitles: [] };
+    }
   }
 
   try {
@@ -478,7 +503,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
 
     // Fetch all subtitles
     debugServer.log('Fetching subtitles from OpenSubtitles...');
-    const allSubtitles = await fetchAllSubtitles(imdbId, type, season, episode, videoParams);
+    const allSubtitles = await fetchAllSubtitles(id, movieType, type, season, episode, videoParams);
 
     if (!allSubtitles) {
       debugServer.warn('No subtitles found');
@@ -552,13 +577,13 @@ async function subtitlesHandler({ type, id, extra, config }) {
       if (!mergedSrt) continue;
 
       // Store in cache (for local/backup)
-      const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v${version}`;
+      const cacheKey = `${id}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v${version}`;
       storeSubtitle(cacheKey, mergedSrt);
 
       // Use dynamic URL that regenerates subtitle on each request (for serverless)
       const dynamicParams = [
         type,
-        imdbId,
+        id,
         season || '0',
         episode || '0',
         mainLang,
@@ -595,15 +620,21 @@ builder.defineSubtitlesHandler(subtitlesHandler);
  * Generate merged subtitle dynamically (for serverless environments)
  * Called directly by URL - no cache dependency
  */
-async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId) {
-  debugServer.log('Dynamic subtitle generation:', { type, imdbId, mainLang, transLang });
+async function generateDynamicSubtitle(type, id, season, episode, mainLang, transLang, mainSubId, transSubId) {
+  debugServer.log('Dynamic subtitle generation:', { type, id, mainLang, transLang });
+
+  let movieType = MovieType.IMDB;
+  if (id.startsWith('kitsu')) {
+    movieType = MovieType.KITSU;
+  }
 
   try {
     // Fetch all subtitles
     const allSubtitles = await fetchAllSubtitles(
-      imdbId, 
-      type, 
-      season !== '0' ? season : null, 
+      id,
+      movieType,
+      type,
+      season !== '0' ? season : null,
       episode !== '0' ? episode : null
     );
 
@@ -621,7 +652,7 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
       // Fallback: get best match by language
       const mainSubList = filterSubtitlesByLanguage(allSubtitles, mainLang);
       const transSubList = filterSubtitlesByLanguage(allSubtitles, transLang);
-      
+
       if (!mainSubList || !transSubList) {
         return null;
       }
@@ -667,7 +698,7 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
 
     const srtContent = formatSrt(merged);
     debugServer.log(`Generated ${merged.length} merged subtitle entries`);
-    
+
     return srtContent;
   } catch (error) {
     debugServer.error('Error generating dynamic subtitle:', sanitizeForLogging(error.message));
