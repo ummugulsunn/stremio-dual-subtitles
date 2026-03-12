@@ -382,11 +382,15 @@ function msToSrtTime(ms) {
 /**
  * Join multi-line subtitle text into a single line.
  * For CJK languages, joins without spaces to avoid breaking character flow.
+ * If stripSSATags is true, removes SSA tags from the text.
  */
-function joinSubtitleLines(text, langCode) {
+function joinSubtitleLines(text, langCode, stripSSATags = false) {
   if (!text) return '';
   const cjk = isCjkLanguage(langCode);
-  return text.replace(/\r?\n|\r/g, cjk ? '' : ' ').trim();
+  if (stripSSATags) text = text.replace(/\{[^}]*\}/g, '');
+  return text
+    .replace(/\r?\n|\r/g, cjk ? '' : ' ')
+    .trim();
 }
 
 /**
@@ -455,7 +459,8 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
       const transSub = transSubs[bestMatchIndex];
       const cleanTransText = joinSubtitleLines(
         sanitize(transSub.text, { allowedTags: [], allowedAttributes: {} }),
-        transLang
+        transLang,
+        true
       );
 
       if (cleanTransText) {
