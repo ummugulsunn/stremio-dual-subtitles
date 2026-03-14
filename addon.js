@@ -76,7 +76,7 @@ function formatSrtSimple(subtitles) {
   return lines.join('\n');
 }
 
-const { decodeSubtitleBuffer, getLanguageAliases } = require('./encoding');
+const { decodeSubtitleBuffer, getLanguageAliases, isCjkLanguage } = require('./encoding');
 const { 
   languageMap, 
   getLanguageOptions, 
@@ -88,6 +88,10 @@ const {
 // Configuration
 const ADDON_NAME = process.env.ADDON_NAME || 'Dual Subtitles';
 const ADDON_VERSION = '1.0.0';
+
+let _addonBaseUrl = '';
+function setBaseUrl(url) { _addonBaseUrl = url.replace(/\/$/, ''); }
+function getBaseUrl() { return _addonBaseUrl; }
 
 // Create addon manifest
 const manifest = {
@@ -135,7 +139,7 @@ async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
     return await axios.get(url, options);
   } catch (error) {
     const status = error && error.response ? error.response.status : null;
-    if (retries > 0 && (status === 429 || status === 503 || status === 504)) {
+    if (retries > 0 && (status === 429 || status === 469 || status === 503 || status === 504)) {
       await new Promise(resolve => setTimeout(resolve, backoffMs));
       return fetchWithRetry(url, options, retries - 1, backoffMs * 2);
     }
@@ -151,9 +155,6 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
 
   if (type === 'series' && season && episode) {
     apiUrl += `:${season}:${episode}`;
-  } else {
-    // Use video hash for better matching, or 0 to trigger full API
-    apiUrl += `:${videoParams.videoHash || '0'}`;
   }
 
   // Add query params for better matching
@@ -216,6 +217,12 @@ async function fetchSubtitleContent(url, languageCode = null) {
       maxContentLength: 5 * 1024 * 1024 // 5MB limit
     });
 
+    // Skip forced subtitles — they only contain signs/songs, not full dialogue
+    const disposition = response.headers && response.headers['content-disposition'];
+    if (disposition && disposition.toLowerCase().includes('forced')) {
+      return null;
+    }
+
     let buffer = Buffer.from(response.data);
 
     // Handle gzip compressed files
@@ -237,23 +244,79 @@ async function fetchSubtitleContent(url, languageCode = null) {
 }
 
 /**
- * Parse SRT time format to milliseconds.
+ * Parse SRT/VTT time format to milliseconds.
+ * Accepts both comma (SRT: 00:01:23,456) and period (VTT: 00:01:23.456) separators.
  */
 function parseTimeToMs(timeString) {
-  if (!timeString || !/\d{2}:\d{2}:\d{2},\d{3}/.test(timeString)) {
-    return 0;
-  }
-  const parts = timeString.split(':');
-  const secondsParts = parts[2].split(',');
-  const hours = parseInt(parts[0], 10);
-  const minutes = parseInt(parts[1], 10);
-  const seconds = parseInt(secondsParts[0], 10);
-  const milliseconds = parseInt(secondsParts[1], 10);
+  if (!timeString) return 0;
+
+  const match = timeString.match(/(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})/);
+  if (!match) return 0;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = parseInt(match[3], 10);
+  const ms = match[4].padEnd(3, '0');
+  const milliseconds = parseInt(ms, 10);
   return (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds;
 }
 
 /**
- * Parse SRT text into subtitle objects.
+ * Normalize VTT content to SRT-compatible format.
+ * Strips WEBVTT header, style blocks, and adds numeric cue IDs if missing.
+ */
+function normalizeVttToSrt(text) {
+  const lines = text.split('\n');
+  const output = [];
+  let cueIndex = 0;
+  let inHeader = true;
+  let inStyleBlock = false;
+  let expectTimestamp = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    if (inHeader) {
+      if (line === '' || line.startsWith('WEBVTT') || line.startsWith('Kind:') ||
+          line.startsWith('Language:') || line.startsWith('NOTE')) {
+        continue;
+      }
+      inHeader = false;
+    }
+
+    if (line.startsWith('STYLE') || line.startsWith('::cue')) {
+      inStyleBlock = true;
+      continue;
+    }
+    if (inStyleBlock) {
+      if (line === '') inStyleBlock = false;
+      continue;
+    }
+
+    if (line.includes('-->')) {
+      cueIndex++;
+      const normalized = line.replace(/\./g, ',');
+      output.push('');
+      output.push(String(cueIndex));
+      output.push(normalized);
+      expectTimestamp = false;
+      continue;
+    }
+
+    // Skip VTT numeric cue identifiers (a number line right before a timestamp)
+    if (/^\d+$/.test(line) && i + 1 < lines.length && lines[i + 1].includes('-->')) {
+      continue;
+    }
+
+    output.push(line);
+    expectTimestamp = false;
+  }
+
+  return output.join('\n');
+}
+
+/**
+ * Parse SRT text into subtitle objects. Also handles VTT input.
  */
 function parseSrt(srtText) {
   if (!srtText || typeof srtText !== 'string') return null;
@@ -266,6 +329,18 @@ function parseSrt(srtText) {
     if (srtText.charCodeAt(0) === 0xFEFF) {
       srtText = srtText.substring(1);
     }
+
+    // Detect and convert VTT format
+    const trimmed = srtText.trimStart();
+    if (trimmed.startsWith('WEBVTT')) {
+      srtText = normalizeVttToSrt(srtText);
+    }
+    
+    // Normalize period-separated timestamps to comma-separated for the parser
+    srtText = srtText.replace(
+      /(\d{1,2}:\d{2}:\d{2})\.(\d{1,3})/g,
+      '$1,$2'
+    );
     
     // Use simple parser
     const parsed = parseSrtSimple(srtText);
@@ -297,9 +372,31 @@ function msToSrtTime(ms) {
 }
 
 /**
- * Merge two subtitle arrays based on time overlap.
+ * Join multi-line subtitle text into a single line.
+ * For CJK languages, joins without spaces to avoid breaking character flow.
  */
-function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
+function joinSubtitleLines(text, langCode) {
+  if (!text) return '';
+  const cjk = isCjkLanguage(langCode);
+  return text.replace(/\r?\n|\r/g, cjk ? '' : ' ').trim();
+}
+
+/**
+ * Merge two subtitle arrays based on time overlap.
+ * @param {Array} mainSubs - Primary language subtitles
+ * @param {Array} transSubs - Translation language subtitles
+ * @param {Object} options - Merge options
+ * @param {number} options.mergeThresholdMs - Max ms gap to consider a match (default 500)
+ * @param {string|null} options.mainLang - Primary language code for CJK-aware joining
+ * @param {string|null} options.transLang - Translation language code for CJK-aware joining
+ */
+function mergeSubtitles(mainSubs, transSubs, options = {}) {
+  const {
+    mergeThresholdMs = 500,
+    mainLang = null,
+    transLang = null
+  } = typeof options === 'number' ? { mergeThresholdMs: options } : options;
+
   const mergedSubs = [];
   let transIndex = 0;
 
@@ -312,7 +409,6 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
     let bestMatchIndex = -1;
     let smallestTimeDiff = Infinity;
 
-    // Search for matching translation subtitle
     for (let i = transIndex; i < transSubs.length; i++) {
       const transSub = transSubs[i];
       if (!transSub || !transSub.startTime || !transSub.endTime) continue;
@@ -320,7 +416,6 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
       const transStartTime = parseTimeToMs(transSub.startTime);
       const transEndTime = parseTimeToMs(transSub.endTime);
 
-      // Check for overlap or proximity
       const startsOverlap = transStartTime >= mainStartTime && transStartTime < mainEndTime;
       const endsOverlap = transEndTime > mainStartTime && transEndTime <= mainEndTime;
       const isWithin = transStartTime >= mainStartTime && transEndTime <= mainEndTime;
@@ -336,30 +431,26 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
         break;
       }
 
-      // Advance starting point for next search
       if (transEndTime < mainStartTime - mergeThresholdMs * 2 && i === transIndex) {
         transIndex = i + 1;
       }
     }
 
-    // Clean and flatten main text
-    const cleanMainText = sanitize(mainSub.text, {
-      allowedTags: [],
-      allowedAttributes: {}
-    }).replace(/\r?\n|\r/g, ' ').trim();
+    const cleanMainText = joinSubtitleLines(
+      sanitize(mainSub.text, { allowedTags: [], allowedAttributes: {} }),
+      mainLang
+    );
 
     let mergedText = cleanMainText;
 
-    // Add translation if found
     if (bestMatchIndex !== -1) {
       const transSub = transSubs[bestMatchIndex];
-      const cleanTransText = sanitize(transSub.text, {
-        allowedTags: [],
-        allowedAttributes: {}
-      }).replace(/\r?\n|\r/g, ' ').trim();
+      const cleanTransText = joinSubtitleLines(
+        sanitize(transSub.text, { allowedTags: [], allowedAttributes: {} }),
+        transLang
+      );
 
       if (cleanTransText) {
-        // Primary on top, secondary (italic) on bottom
         mergedText = `${cleanMainText}\n<i>${cleanTransText}</i>`;
       }
     }
@@ -544,8 +635,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
       const transParsed = parseSrt(transContent);
       if (!transParsed || transParsed.length === 0) continue;
 
-      // Merge subtitles
-      const merged = mergeSubtitles([...mainParsed], transParsed);
+      const merged = mergeSubtitles([...mainParsed], transParsed, { mainLang, transLang });
       if (!merged || merged.length === 0) continue;
 
       const mergedSrt = formatSrt(merged);
@@ -569,9 +659,8 @@ async function subtitlesHandler({ type, id, extra, config }) {
 
       finalSubtitles.push({
         id: `dual-${selectedMainSub.id}-${transSubInfo.id}`,
-        url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
-        lang: `${mainLang}+${transLang}`,
-        SubtitlesName: `🌍 ${getLanguageName(mainLang)} + ${getLanguageName(transLang)}`
+        url: `${getBaseUrl()}/subs/${dynamicParams}.srt`,
+        lang: `${mainLang}+${transLang}`
       });
     }
 
@@ -637,7 +726,7 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
 
       if (!mainParsed || !transParsed) return null;
 
-      const merged = mergeSubtitles(mainParsed, transParsed);
+      const merged = mergeSubtitles(mainParsed, transParsed, { mainLang, transLang });
       return formatSrt(merged);
     }
 
@@ -658,8 +747,7 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
       return null;
     }
 
-    // Merge subtitles
-    const merged = mergeSubtitles(mainParsed, transParsed);
+    const merged = mergeSubtitles(mainParsed, transParsed, { mainLang, transLang });
     if (!merged || merged.length === 0) {
       debugServer.warn('Merge failed');
       return null;
@@ -678,8 +766,21 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
 module.exports = {
   builder,
   manifest,
+  setBaseUrl,
   getSubtitle,
   subtitleCache,
   subtitlesHandler,
-  generateDynamicSubtitle
+  generateDynamicSubtitle,
+  // Exported for testing
+  _test: {
+    parseTimeToMs,
+    parseSrt,
+    parseSrtSimple,
+    normalizeVttToSrt,
+    mergeSubtitles,
+    joinSubtitleLines,
+    formatSrt,
+    formatSrtSimple,
+    msToSrtTime
+  }
 };

@@ -6,8 +6,9 @@
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
 
-// Sample size for chardet detection (1KB is enough for accurate detection)
-const CHARDET_SAMPLE_SIZE = 1024;
+// Sample size for chardet detection (4KB gives better accuracy for CJK files
+// where the first 1KB may be mostly ASCII timestamps)
+const CHARDET_SAMPLE_SIZE = 4096;
 
 /**
  * Map OpenSubtitles 3-letter codes to ISO 639-1 2-letter codes.
@@ -40,8 +41,8 @@ const ISO639_3_TO_1 = {
   'ben': 'bn', 'tha': 'th', 'vie': 'vi', 'ind': 'id',
   'may': 'ms', 'msa': 'ms', 'tgl': 'tl',
   
-  // Chinese variants
-  'zht': 'zh', 'zhc': 'zh',
+  // Chinese variants — map to distinct keys so encoding priority differs
+  'zht': 'zh-tw', 'zhc': 'zh',
   
   // Portuguese/Spanish variants
   'pob': 'pt', 'pom': 'pt', 'spl': 'es', 'spn': 'es',
@@ -153,6 +154,7 @@ const LANGUAGE_ENCODINGS = {
   
   // CJK
   'zh': ['gbk', 'gb2312', 'big5'],
+  'zh-tw': ['big5', 'gbk', 'gb2312'],
   'ja': ['shift_jis', 'euc-jp'],
   'ko': ['euc-kr', 'cp949'],
 };
@@ -374,11 +376,28 @@ function decodeSubtitleBuffer(buffer, languageHint = null) {
   return subtitleText;
 }
 
+const CJK_LANGUAGE_CODES = new Set([
+  'zh', 'zh-tw', 'ja', 'ko',
+  'chi', 'zho', 'zht', 'zhc', 'jpn', 'kor',
+]);
+
+/**
+ * Check if a language code corresponds to a CJK language.
+ * CJK languages don't use spaces between characters.
+ * @param {string|null} langCode - Language code (2 or 3 letter)
+ * @returns {boolean}
+ */
+function isCjkLanguage(langCode) {
+  if (!langCode) return false;
+  return CJK_LANGUAGE_CODES.has(langCode.toLowerCase());
+}
+
 module.exports = {
   decodeSubtitleBuffer,
   normalizeLanguageCode,
   getLanguageAliases,
   fixCharacterEncodings,
+  isCjkLanguage,
   ISO639_3_TO_1,
   LANGUAGE_ALIASES,
 };
