@@ -660,7 +660,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
       finalSubtitles.push({
         id: `dual-${selectedMainSub.id}-${transSubInfo.id}`,
         url: `${getBaseUrl()}/subs/${dynamicParams}.srt`,
-        lang: `${mainLang}+${transLang}`
+        lang: mainLang
       });
     }
 
