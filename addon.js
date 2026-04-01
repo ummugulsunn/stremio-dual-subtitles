@@ -658,8 +658,8 @@ async function subtitlesHandler({ type, id, extra, config }) {
       finalSubtitles.push({
         id: `dual-${selectedMainSub.id}-${transSubInfo.id}`,
         url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
-        lang: `${mainLang}+${transLang}`,
-        SubtitlesName: `🌍 ${getLanguageName(mainLang)} + ${getLanguageName(transLang)}`
+        lang: mainLang,
+        SubtitlesName: `Dual (${mainLang.toUpperCase()}+${transLang.toUpperCase()}) - ${getLanguageName(mainLang)} + ${getLanguageName(transLang)}`
       });
     }
 

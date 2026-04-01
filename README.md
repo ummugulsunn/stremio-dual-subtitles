@@ -229,6 +229,11 @@ sudo ufw allow 7000
 4. Select the dual subtitle option
 5. Subtitles will appear with both languages
 
+**Android TV compatibility note:**
+- Dual subtitles are published with a standard single `lang` code for maximum client compatibility
+- Because of this, your dual subtitle option appears under your **Primary Language** group in Stremio's subtitle list
+- The dual entry remains easy to identify by its title format: `Dual (ENG+TUR) - English + Turkish`
+
 ---
 
 ## Project Structure
