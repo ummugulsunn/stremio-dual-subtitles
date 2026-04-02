@@ -379,6 +379,19 @@ function joinSubtitleLines(text, langCode) {
   return text.replace(/\r?\n|\r/g, cjk ? '' : ' ').trim();
 }
 
+/** Escape text embedded in SRT HTML tags (avoid breaking markup / injection). */
+function htmlEncodeSrt(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Muted color for secondary line; players that ignore <font> still have <b> + › marker. */
+const DUAL_SUB_TRANS_COLOR = '#94a3b8';
+
 /**
  * Merge two subtitle arrays based on time overlap.
  * @param {Array} mainSubs - Primary language subtitles
@@ -439,7 +452,9 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
       mainLang
     );
 
-    let mergedText = cleanMainText;
+    if (!cleanMainText) continue;
+
+    let mergedText;
 
     if (bestMatchIndex !== -1) {
       const transSub = transSubs[bestMatchIndex];
@@ -449,8 +464,15 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
       );
 
       if (cleanTransText) {
-        mergedText = `${cleanMainText}\n<i>${cleanTransText}</i>`;
+        const encMain = htmlEncodeSrt(cleanMainText);
+        const encTrans = htmlEncodeSrt(cleanTransText);
+        mergedText =
+          `<b>${encMain}</b>\n\u203a <i><font color="${DUAL_SUB_TRANS_COLOR}">${encTrans}</font></i>`;
       }
+    }
+
+    if (mergedText === undefined) {
+      mergedText = `<b>${htmlEncodeSrt(cleanMainText)}</b>`;
     }
 
     if (!mergedText) continue;

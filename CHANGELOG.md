@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Android TV subtitle listing compatibility by using a standard single `lang` code for dual subtitles and clearer dual naming format (`#8`)
+- Clearer visual distinction between primary and secondary lines in merged SRT (`<b>`, muted color, and a `›` marker) for clients that support basic SRT HTML (`#9`)
 
 ## [1.1.0] - 2026-02-04
 

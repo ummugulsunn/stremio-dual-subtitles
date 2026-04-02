@@ -1,6 +1,6 @@
 /**
  * Unit tests for Stremio Dual Subtitles bug fixes.
- * Covers: Issue #1 (ENG+ZHT sync), Issue #2 (some subtitles not working), Issue #5 (Android TV blank label)
+ * Covers: Issue #1 (ENG+ZHT sync), Issue #2 (some subtitles not working), Issue #5 (Android TV blank label), Issue #9 (dual line styling)
  *
  * Run: npm test  (or: node test.js)
  */
@@ -298,6 +298,23 @@ test('Backward compat: numeric threshold still works', () => {
   const result = mergeSubtitles(main, trans, 500);
   assert.strictEqual(result.length, 1);
   assert.ok(result[0].text.includes('Hola'));
+});
+
+test('Dual merge distinguishes lines: bold primary, marker, colored secondary [Issue #9]', () => {
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: 'Hello' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: 'Hola' }
+  ];
+  const result = mergeSubtitles(main, trans, { mainLang: 'eng', transLang: 'spa' });
+  assert.strictEqual(result.length, 1);
+  assert.ok(result[0].text.includes('<b>Hello</b>'), 'primary line should be bold');
+  assert.ok(result[0].text.includes('\u203a '), 'secondary line should include a visible marker');
+  assert.ok(
+    result[0].text.includes(`<font color="#94a3b8">`),
+    'secondary should use a muted color where the player supports it'
+  );
 });
 
 // ============================================================================
