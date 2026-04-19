@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and general help
+    url: https://github.com/ummugulsunn/stremio-dual-subtitles/discussions
+    about: Ask a question or talk to the community in GitHub Discussions. Issues are reserved for actionable bugs and feature requests.
+  - name: Security vulnerability
+    url: https://github.com/ummugulsunn/stremio-dual-subtitles/security/advisories/new
+    about: Do not file security issues publicly. Use GitHub's private vulnerability reporting. See SECURITY.md for details.
+  - name: Support and troubleshooting
+    url: https://github.com/ummugulsunn/stremio-dual-subtitles/blob/master/SUPPORT.md
+    about: Installation help, FAQ, and troubleshooting tips.

@@ -399,7 +399,7 @@ function generateLandingHTML(manifest, baseUrl) {
     
     .preview-primary {
       font-size: 16px;
-      font-weight: 500;
+      font-weight: 700;
       margin-bottom: 4px;
     }
     
@@ -407,6 +407,10 @@ function generateLandingHTML(manifest, baseUrl) {
       font-size: 14px;
       font-style: italic;
       color: var(--text-muted);
+    }
+
+    .preview-secondary::before {
+      content: '› ';
     }
     
     /* Buttons */

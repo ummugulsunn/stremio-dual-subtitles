@@ -4,7 +4,7 @@ A Stremio addon that displays **two subtitle languages simultaneously** - design
 
 [![Live Demo](https://img.shields.io/badge/Live-Demo-7c3aed)](https://stremio-dual-subtitles.vercel.app)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Stremio](https://img.shields.io/badge/Stremio-Addon-purple.svg)](https://www.stremio.com/)
 
 ---
@@ -35,7 +35,7 @@ A Stremio addon that displays **two subtitle languages simultaneously** - design
 
 ![Dual Subtitles in Action](public/demo.png)
 
-*Primary language displayed on top, secondary language below in italics. Perfect for learning while watching.*
+*Primary language on top in bold, secondary below with a marker and (where the player supports SRT styling) italic and a softer color. Actual appearance depends on the Stremio client.*
 
 **Live Instance:** [stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)
 
@@ -45,7 +45,7 @@ A Stremio addon that displays **two subtitle languages simultaneously** - design
 
 | Feature | Description |
 |---------|-------------|
-| **Dual Display** | Two languages shown simultaneously - primary on top, translation below |
+| **Dual Display** | Two languages at once - primary line emphasized, second line with a visible marker and softer styling where supported |
 | **70+ Languages** | Full OpenSubtitles language support including rare languages |
 | **Smart Sync** | Intelligent time-based subtitle merging algorithm |
 | **Encoding Support** | UTF-8, UTF-16, Windows codepages, ISO-8859 variants |
@@ -75,8 +75,8 @@ The fastest way to get started - no installation required.
 Run your own instance for development or privacy.
 
 **Prerequisites:**
-- [Node.js](https://nodejs.org/) v16.0.0 or higher
-- [npm](https://www.npmjs.com/) v7.0.0 or higher
+- [Node.js](https://nodejs.org/) v18.0.0 or higher (20.x LTS recommended)
+- [npm](https://www.npmjs.com/) v9.0.0 or higher
 - [Stremio](https://www.stremio.com/) installed on your device
 
 **Step-by-step:**
@@ -201,7 +201,7 @@ sudo ufw allow 7000
 
 **Recommended Setup:**
 1. Set the language you're **learning** as the **Primary Language** (displayed on top)
-2. Set your **native language** as the **Secondary Language** (displayed below in italics)
+2. Set your **native language** as the **Secondary Language** (shown on the second line with a marker and softer styling where the player supports it)
 3. This way, you try to read and understand the primary language first, then verify with your native language
 
 **Learning Tips:**
@@ -316,7 +316,7 @@ The addon uses a time-based matching algorithm:
 
 1. For each primary subtitle entry, find overlapping secondary entries
 2. Match based on start/end time proximity (within 1 second tolerance)
-3. Combine matched entries: primary text + secondary text (italic)
+3. Combine matched entries: primary line uses `<b>`, secondary line uses a `›` prefix plus `<i>` and a muted `<font color>` when the player renders HTML in SRT
 4. Handle edge cases: missing translations, timing gaps
 
 ### Supported Encodings
@@ -466,7 +466,7 @@ A: Open an issue on [GitHub](https://github.com/ummugulsunn/stremio-dual-subtitl
 ### Server Won't Start
 
 1. **Port in use**: Change PORT in `.env` or kill the process using port 7000
-2. **Node version**: Ensure Node.js 16+ is installed
+2. **Node version**: Ensure Node.js 18+ is installed
 3. **Dependencies**: Run `npm install` again
 
 ---

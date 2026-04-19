@@ -30,6 +30,6 @@
     "stremio-addon-sdk": "^1.6.10"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   }
 }
