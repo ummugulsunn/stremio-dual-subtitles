@@ -1,0 +1,77 @@
+name: Feature request
+description: Suggest an improvement or a new capability
+title: "feat: <short summary>"
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Please describe the problem
+        first, then the solution you have in mind (if any).
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues and discussions to avoid duplicates.
+          required: true
+        - label: This is not a security issue (for those, see [SECURITY.md](../SECURITY.md)).
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the user-facing problem, not the solution.
+      placeholder: "When I watch Japanese shows with English as secondary, I can't tell which line is which because …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like the addon to behave? It's fine to say "I don't know the best fix".
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other workarounds you tried or ruled out, and why.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this touch?
+      multiple: true
+      options:
+        - Configure page / UI
+        - Subtitle fetching (OpenSubtitles)
+        - Subtitle merging / rendering
+        - Language support
+        - Deployment / serverless
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: Would you be willing to help?
+      options:
+        - label: I would be willing to open a pull request for this.
+          required: false
+
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow this project's [Code of Conduct](../CODE_OF_CONDUCT.md).
+          required: true

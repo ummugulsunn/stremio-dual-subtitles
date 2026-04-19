@@ -1,0 +1,122 @@
+name: Bug report
+description: Report a reproducible bug in the addon
+title: "bug: <short summary>"
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug!
+
+        Before you continue, please:
+
+        1. Search existing issues (including closed ones) to avoid duplicates.
+        2. Verify the backend is up at
+           [https://stremio-dual-subtitles.vercel.app/health](https://stremio-dual-subtitles.vercel.app/health) —
+           it should return `{"status":"ok", ...}`.
+        3. Try reinstalling the addon from the configure page.
+
+        The more specific the report, the faster it can be fixed.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I verified the `/health` endpoint returns `ok`.
+          required: true
+        - label: I reinstalled the addon in Stremio after picking my languages.
+          required: true
+
+  - type: input
+    id: stremio-client
+    attributes:
+      label: Stremio client and version
+      description: e.g. "Stremio Desktop 4.4.168 on macOS 15.4", "Stremio Web", "Stremio Android TV 1.6.5".
+      placeholder: "Stremio Desktop 4.4.168 on macOS 15.4"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: e.g. "macOS 15.4", "Windows 11 23H2", "Android 14", "Android TV 12".
+    validations:
+      required: true
+
+  - type: input
+    id: primary-lang
+    attributes:
+      label: Primary language
+      description: The language you picked in the "Primary" slot on the configure page.
+      placeholder: "English (eng)"
+    validations:
+      required: true
+
+  - type: input
+    id: secondary-lang
+    attributes:
+      label: Secondary language
+      description: The language you picked in the "Secondary" slot.
+      placeholder: "Turkish (tur)"
+    validations:
+      required: true
+
+  - type: input
+    id: imdb-id
+    attributes:
+      label: IMDb ID
+      description: Paste the IMDb ID of the movie or series episode. Series episodes look like `tt1234567:1:2`.
+      placeholder: "tt0111161"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include screenshots if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps someone else can follow to see the same bug.
+      placeholder: |
+        1. Go to /configure
+        2. Pick English + Turkish
+        3. Install, play `tt0111161`
+        4. Observe that …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs (optional)
+      description: |
+        If you're self-hosting, paste relevant server logs here. Make sure to
+        redact any tokens, cookies, or personal URLs before posting. The maintainer
+        will not ask for your API keys.
+      render: shell
+
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow this project's [Code of Conduct](../CODE_OF_CONDUCT.md).
+          required: true

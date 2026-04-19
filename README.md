@@ -4,7 +4,7 @@ A Stremio addon that displays **two subtitle languages simultaneously** - design
 
 [![Live Demo](https://img.shields.io/badge/Live-Demo-7c3aed)](https://stremio-dual-subtitles.vercel.app)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Stremio](https://img.shields.io/badge/Stremio-Addon-purple.svg)](https://www.stremio.com/)
 
 ---
@@ -75,8 +75,8 @@ The fastest way to get started - no installation required.
 Run your own instance for development or privacy.
 
 **Prerequisites:**
-- [Node.js](https://nodejs.org/) v16.0.0 or higher
-- [npm](https://www.npmjs.com/) v7.0.0 or higher
+- [Node.js](https://nodejs.org/) v18.0.0 or higher (20.x LTS recommended)
+- [npm](https://www.npmjs.com/) v9.0.0 or higher
 - [Stremio](https://www.stremio.com/) installed on your device
 
 **Step-by-step:**
@@ -466,7 +466,7 @@ A: Open an issue on [GitHub](https://github.com/ummugulsunn/stremio-dual-subtitl
 ### Server Won't Start
 
 1. **Port in use**: Change PORT in `.env` or kill the process using port 7000
-2. **Node version**: Ensure Node.js 16+ is installed
+2. **Node version**: Ensure Node.js 18+ is installed
 3. **Dependencies**: Run `npm install` again
 
 ---
