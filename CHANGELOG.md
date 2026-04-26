@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Android TV subtitle listing compatibility by using a standard single `lang` code for dual subtitles and clearer dual naming format (`#8`)
 - Clearer visual distinction between primary and secondary lines in merged SRT (`<b>`, muted color, and a `›` marker) for clients that support basic SRT HTML (`#9`)
+- Dual-subtitle desync between two language tracks taken from different releases. Replaced the single-pass nearest-start-time matcher with a multi-stage alignment engine (`lib/syncEngine.js`):
+  - **Stage 1 — global offset:** cross-correlation of cue presence signals detects a uniform shift between the tracks (the most common failure mode, e.g. The Sopranos S01E03 ENG+TUR where the entire translation was off by ~2.5s).
+  - **Stage 2 — linear drift:** least-squares affine fit on anchor pairs corrects framerate-mismatch drift (e.g. 23.976 vs 25 fps).
+  - **Stage 3 — bipartite assignment:** overlap-fraction (Jaccard) scoring with used-set tracking, so a single translation cue can no longer be glued to two different primary cues.
+  - **Stage 4 — 1:N consolidation:** a primary cue may absorb multiple short translation cues that all overlap it, fixing cue-boundary mismatches.
 
 ## [1.1.0] - 2026-02-04
 

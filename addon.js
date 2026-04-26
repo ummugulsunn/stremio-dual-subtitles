@@ -77,13 +77,14 @@ function formatSrtSimple(subtitles) {
 }
 
 const { decodeSubtitleBuffer, getLanguageAliases, isCjkLanguage } = require('./encoding');
-const { 
-  languageMap, 
-  getLanguageOptions, 
-  extractBrowserLanguage, 
+const {
+  languageMap,
+  getLanguageOptions,
+  extractBrowserLanguage,
   parseLangCode,
-  getLanguageName 
+  getLanguageName
 } = require('./languages');
+const { alignAndMatch } = require('./lib/syncEngine');
 
 // Configuration
 const ADDON_NAME = process.env.ADDON_NAME || 'Dual Subtitles';
@@ -393,77 +394,94 @@ function htmlEncodeSrt(text) {
 const DUAL_SUB_TRANS_COLOR = '#94a3b8';
 
 /**
- * Merge two subtitle arrays based on time overlap.
- * @param {Array} mainSubs - Primary language subtitles
- * @param {Array} transSubs - Translation language subtitles
- * @param {Object} options - Merge options
- * @param {number} options.mergeThresholdMs - Max ms gap to consider a match (default 500)
- * @param {string|null} options.mainLang - Primary language code for CJK-aware joining
- * @param {string|null} options.transLang - Translation language code for CJK-aware joining
+ * Merge two subtitle arrays into one, aligning the secondary track to the
+ * primary track's timebase before matching.
+ *
+ * The actual alignment work (global offset detection via cross-correlation,
+ * affine drift correction, and overlap-based bipartite assignment) is in
+ * lib/syncEngine.js. This function is a thin wrapper that converts SRT
+ * timestamp strings to milliseconds, runs the engine, and renders the
+ * dual-line SRT text.
+ *
+ * @param {Array} mainSubs - Primary language subtitles (SRT-time strings)
+ * @param {Array} transSubs - Translation language subtitles (SRT-time strings)
+ * @param {Object|number} options - Merge options (number = legacy threshold)
+ * @param {string|null} [options.mainLang]  - For CJK-aware line joining
+ * @param {string|null} [options.transLang] - For CJK-aware line joining
+ * @param {number}      [options.matchThresholdMs=1500]
+ * @param {boolean}     [options.allowMultiTrans=true]
+ *        If true, several short trans cues may be concatenated into one
+ *        primary cue (handles cue-boundary mismatches).
+ * @param {boolean}     [options.enableOffset=true]
+ * @param {boolean}     [options.enableDrift=true]
  */
 function mergeSubtitles(mainSubs, transSubs, options = {}) {
+  const opts = typeof options === 'number'
+    ? { matchThresholdMs: Math.max(options, 1500) }
+    : options;
+
   const {
-    mergeThresholdMs = 500,
     mainLang = null,
-    transLang = null
-  } = typeof options === 'number' ? { mergeThresholdMs: options } : options;
+    transLang = null,
+    matchThresholdMs = 1500,
+    allowMultiTrans = true,
+    enableOffset = true,
+    enableDrift = true
+  } = opts;
 
+  const mainTimed = [];
+  for (const s of mainSubs || []) {
+    if (!s || !s.startTime || !s.endTime) continue;
+    const startMs = parseTimeToMs(s.startTime);
+    const endMs = parseTimeToMs(s.endTime);
+    if (endMs <= startMs) continue;
+    mainTimed.push({ ...s, startMs, endMs });
+  }
+
+  const transTimed = [];
+  for (const s of transSubs || []) {
+    if (!s || !s.startTime || !s.endTime) continue;
+    const startMs = parseTimeToMs(s.startTime);
+    const endMs = parseTimeToMs(s.endTime);
+    if (endMs <= startMs) continue;
+    transTimed.push({ ...s, startMs, endMs });
+  }
+
+  const { matches } = alignAndMatch(mainTimed, transTimed, {
+    enableOffset,
+    enableDrift,
+    matchThreshold: matchThresholdMs,
+    allowMultiTrans,
+    log: msg => debugServer.log(sanitizeForLogging(msg))
+  });
+
+  const transJoiner = isCjkLanguage(transLang) ? '' : ' ';
   const mergedSubs = [];
-  let transIndex = 0;
 
-  for (const mainSub of mainSubs) {
-    if (!mainSub || !mainSub.startTime || !mainSub.endTime) continue;
-
-    const mainStartTime = parseTimeToMs(mainSub.startTime);
-    const mainEndTime = parseTimeToMs(mainSub.endTime);
-
-    let bestMatchIndex = -1;
-    let smallestTimeDiff = Infinity;
-
-    for (let i = transIndex; i < transSubs.length; i++) {
-      const transSub = transSubs[i];
-      if (!transSub || !transSub.startTime || !transSub.endTime) continue;
-
-      const transStartTime = parseTimeToMs(transSub.startTime);
-      const transEndTime = parseTimeToMs(transSub.endTime);
-
-      const startsOverlap = transStartTime >= mainStartTime && transStartTime < mainEndTime;
-      const endsOverlap = transEndTime > mainStartTime && transEndTime <= mainEndTime;
-      const isWithin = transStartTime >= mainStartTime && transEndTime <= mainEndTime;
-      const contains = transStartTime < mainStartTime && transEndTime > mainEndTime;
-      const timeDiff = Math.abs(mainStartTime - transStartTime);
-
-      if (startsOverlap || endsOverlap || isWithin || contains || timeDiff < mergeThresholdMs) {
-        if (timeDiff < smallestTimeDiff) {
-          smallestTimeDiff = timeDiff;
-          bestMatchIndex = i;
-        }
-      } else if (transStartTime > mainEndTime + mergeThresholdMs) {
-        break;
-      }
-
-      if (transEndTime < mainStartTime - mergeThresholdMs * 2 && i === transIndex) {
-        transIndex = i + 1;
-      }
-    }
+  for (let mi = 0; mi < mainTimed.length; mi++) {
+    const mainSub = mainTimed[mi];
 
     const cleanMainText = joinSubtitleLines(
       sanitize(mainSub.text, { allowedTags: [], allowedAttributes: {} }),
       mainLang
     );
-
     if (!cleanMainText) continue;
 
     let mergedText;
-
-    if (bestMatchIndex !== -1) {
-      const transSub = transSubs[bestMatchIndex];
-      const cleanTransText = joinSubtitleLines(
-        sanitize(transSub.text, { allowedTags: [], allowedAttributes: {} }),
-        transLang
-      );
-
-      if (cleanTransText) {
+    const transIdxs = matches.get(mi);
+    if (transIdxs && transIdxs.length > 0) {
+      const transParts = [];
+      for (const ti of transIdxs) {
+        const t = transTimed[ti];
+        if (!t) continue;
+        const piece = joinSubtitleLines(
+          sanitize(t.text, { allowedTags: [], allowedAttributes: {} }),
+          transLang
+        );
+        if (piece) transParts.push(piece);
+      }
+      if (transParts.length > 0) {
+        const cleanTransText = transParts.join(transJoiner);
         const encMain = htmlEncodeSrt(cleanMainText);
         const encTrans = htmlEncodeSrt(cleanTransText);
         mergedText =
@@ -478,7 +496,9 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
     if (!mergedText) continue;
 
     mergedSubs.push({
-      ...mainSub,
+      id: mainSub.id,
+      startTime: mainSub.startTime,
+      endTime: mainSub.endTime,
       text: mergedText
     });
   }
