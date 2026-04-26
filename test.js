@@ -619,6 +619,203 @@ test('mergeSubtitles: emits all main cues even when trans is empty', () => {
 });
 
 // ============================================================================
+// sourceSelection — pair generation
+// ============================================================================
+console.log('\n--- sourceSelection ---');
+
+const {
+  filterByLanguage,
+  rankCandidatesForLanguage,
+  generateCandidatePairs
+} = require('./lib/sourceSelection');
+
+test('filterByLanguage: filters by exact lang code', () => {
+  // OpenSubtitles v3 always uses 3-letter ISO codes here, so we don't
+  // need fuzzy alias matching across 2/3-letter codes — but we still
+  // honor whatever getLanguageAliases produces.
+  const subs = [
+    { id: '1', lang: 'eng', g: '1' },
+    { id: '2', lang: 'tur', g: '1' },
+    { id: '3', lang: 'eng', g: '2' }
+  ];
+  const eng = filterByLanguage(subs, 'eng');
+  assert.strictEqual(eng.length, 2);
+  assert.deepStrictEqual(eng.map(s => s.id).sort(), ['1', '3']);
+});
+
+test('rankCandidatesForLanguage: stable order, prefers UTF-8', () => {
+  const subs = [
+    { id: 'a', lang: 'eng', g: '1', SubEncoding: 'CP1254', m: 'i' },
+    { id: 'b', lang: 'eng', g: '1', SubEncoding: 'UTF-8', m: 'i' },
+    { id: 'c', lang: 'eng', g: '2', SubEncoding: 'ASCII', m: 'i' }
+  ];
+  const ranked = rankCandidatesForLanguage(subs, 'eng');
+  assert.strictEqual(ranked[0].id, 'b', 'UTF-8 should outrank others');
+});
+
+test('generateCandidatePairs: prefers same-`g` over zipped fallback (Sopranos pattern)', () => {
+  // Mirrors the real Sopranos S01E03 response: ENG only has g=7, TUR has
+  // g=1 (first by API ranking) and g=7 (second). Old picker grabbed
+  // ENG[0]+TUR[0] = different releases. New picker must produce the
+  // same-`g` pair as the head of the list.
+  const subs = [
+    { id: 'eng-7-A', lang: 'eng', g: '7' },
+    { id: 'tur-1',   lang: 'tur', g: '1' },
+    { id: 'tur-7',   lang: 'tur', g: '7' }
+  ];
+  const pairs = generateCandidatePairs(subs, 'eng', 'tur');
+  assert.ok(pairs.length >= 1);
+  assert.strictEqual(pairs[0].main.id, 'eng-7-A');
+  assert.strictEqual(pairs[0].trans.id, 'tur-7');
+  assert.strictEqual(pairs[0].sameGroup, true);
+  assert.strictEqual(pairs[0].source, 'group');
+});
+
+test('generateCandidatePairs: falls back to zipped order when no `g` overlap', () => {
+  const subs = [
+    { id: 'eng-1', lang: 'eng', g: '1' },
+    { id: 'tur-2', lang: 'tur', g: '2' }
+  ];
+  const pairs = generateCandidatePairs(subs, 'eng', 'tur');
+  assert.ok(pairs.length >= 1);
+  assert.strictEqual(pairs[0].main.id, 'eng-1');
+  assert.strictEqual(pairs[0].trans.id, 'tur-2');
+  assert.strictEqual(pairs[0].sameGroup, false);
+  assert.strictEqual(pairs[0].source, 'fallback');
+});
+
+test('generateCandidatePairs: respects maxPairs cap and returns at most that many', () => {
+  const subs = [];
+  for (let i = 0; i < 6; i++) subs.push({ id: `e${i}`, lang: 'eng', g: String(i) });
+  for (let i = 0; i < 6; i++) subs.push({ id: `t${i}`, lang: 'tur', g: String(i) });
+  const pairs = generateCandidatePairs(subs, 'eng', 'tur', { maxPairs: 3 });
+  assert.strictEqual(pairs.length, 3);
+});
+
+test('generateCandidatePairs: emits no pairs when one language is missing', () => {
+  const subs = [{ id: 'eng-1', lang: 'eng', g: '1' }];
+  const pairs = generateCandidatePairs(subs, 'eng', 'tur');
+  assert.strictEqual(pairs.length, 0);
+});
+
+test('generateCandidatePairs: top ranked main with same-`g` peer wins over higher-ranked main without one', () => {
+  // ENG[0] is best ranked but has no TUR peer at g=99. ENG[1] has a TUR
+  // peer at g=7. We want the same-group pair to lead.
+  const subs = [
+    { id: 'eng-99', lang: 'eng', g: '99' },
+    { id: 'eng-7',  lang: 'eng', g: '7'  },
+    { id: 'tur-7',  lang: 'tur', g: '7'  }
+  ];
+  const pairs = generateCandidatePairs(subs, 'eng', 'tur');
+  assert.strictEqual(pairs[0].main.id, 'eng-7');
+  assert.strictEqual(pairs[0].trans.id, 'tur-7');
+  assert.strictEqual(pairs[0].sameGroup, true);
+});
+
+// ============================================================================
+// syncEngine — sliding-window local offsets
+// ============================================================================
+console.log('\n--- syncEngine.estimateLocalOffsets ---');
+
+const {
+  estimateLocalOffsets,
+  applyLocalOffsets
+} = require('./lib/syncEngine');
+
+// Build a non-periodic dialogue pattern so cross-correlation can't lock
+// onto a self-similarity peak. We use an LCG-based pseudo-random spacing,
+// reproducible across runs without depending on Math.random.
+function buildDialogueTrack(count, startMs = 1000, seed = 42) {
+  let s = seed;
+  const rng = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  const cues = [];
+  let t = startMs;
+  for (let i = 0; i < count; i++) {
+    const dur = 1500 + Math.floor(rng() * 2500);   // 1.5–4.0s cues
+    const gap = 500 + Math.floor(rng() * 6000);    // 0.5–6.5s gaps
+    cues.push({ id: String(i + 1), startMs: t, endMs: t + dur, text: `c${i}` });
+    t += dur + gap;
+  }
+  return cues;
+}
+
+test('estimateLocalOffsets: detects piecewise drift across windows', () => {
+  // First half: trans is +1500ms; second half: trans is -2500ms. We turn
+  // off the global offset stage by feeding a dataset where each segment
+  // averages to its own local offset; the test is just that the sliding
+  // window finds segment-specific anchors.
+  const main = buildDialogueTrack(60);
+  const split = main.length / 2;
+  const trans = main.map((c, i) => {
+    const o = i < split ? 1500 : -2500;
+    return { ...c, startMs: c.startMs + o, endMs: c.endMs + o };
+  });
+  const anchors = estimateLocalOffsets(main, trans, {
+    windowMs: 60000, stepMs: 30000, minCuesPerWindow: 4, maxLocalOffsetMs: 5000
+  });
+  assert.ok(anchors.length >= 3, `expected several anchors, got ${anchors.length}`);
+  // We don't pin exact offsets (cross-correlation has step granularity),
+  // but we expect early anchors to lean positive (trans is delayed) and
+  // late anchors to lean negative (trans is early). estimateOffsetMs
+  // returns the shift applied TO trans, so positive = shift later.
+  const half = main[main.length - 1].startMs / 2;
+  const early = anchors.filter(a => a.centerMs < half);
+  const late = anchors.filter(a => a.centerMs > half);
+  assert.ok(early.length > 0 && late.length > 0);
+  const earlyMean = early.reduce((s, a) => s + a.offsetMs, 0) / early.length;
+  const lateMean = late.reduce((s, a) => s + a.offsetMs, 0) / late.length;
+  assert.ok(
+    earlyMean < lateMean,
+    `early anchors should differ from late ones; got early=${earlyMean} late=${lateMean}`
+  );
+});
+
+test('estimateLocalOffsets: returns empty list with too-short tracks', () => {
+  const anchors = estimateLocalOffsets([], []);
+  assert.deepStrictEqual(anchors, []);
+});
+
+test('applyLocalOffsets: piecewise-linear interpolation between anchors', () => {
+  const subs = [
+    { startMs: 0,     endMs: 1000 },
+    { startMs: 60000, endMs: 61000 },
+    { startMs: 120000,endMs: 121000 }
+  ];
+  const anchors = [
+    { centerMs: 0,      offsetMs: 0 },
+    { centerMs: 120000, offsetMs: 1000 }
+  ];
+  const out = applyLocalOffsets(subs, anchors);
+  assert.strictEqual(out[0].startMs, 0,       'first anchor end held');
+  assert.strictEqual(out[1].startMs, 60500,   'midpoint interpolated');
+  assert.strictEqual(out[2].startMs, 121000,  'second anchor end held');
+});
+
+test('alignAndMatch: piecewise-drifted track matches better with local offsets enabled', () => {
+  // Build a non-periodic dialogue pattern with two segments that have
+  // different local offsets. Local-offsets-on must beat local-offsets-off
+  // when global offset is disabled (so we measure only the local stage).
+  const main = buildDialogueTrack(80);
+  const split = main.length / 2;
+  const trans = main.map((c, i) => {
+    const o = i < split ? 1500 : -2500;
+    return { ...c, startMs: c.startMs + o, endMs: c.endMs + o };
+  });
+  const withLocal = alignAndMatch(main, trans, {
+    matchThreshold: 1500, enableLocalOffsets: true,
+    enableOffset: false, enableDrift: false
+  });
+  const withoutLocal = alignAndMatch(main, trans, {
+    matchThreshold: 1500, enableLocalOffsets: false,
+    enableOffset: false, enableDrift: false
+  });
+  assert.ok(
+    withLocal.matchRate > withoutLocal.matchRate + 0.1,
+    `expected local-offset path to outperform by >10pp; got ${withLocal.matchRate.toFixed(3)} vs ${withoutLocal.matchRate.toFixed(3)}`
+  );
+});
+
+// ============================================================================
 // RESULTS
 // ============================================================================
 console.log('\n========================================');
