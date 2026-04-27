@@ -296,9 +296,13 @@ app.get('/subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:t
     }
     
     trackSubtitleServed();
-    
+
     res.setHeader('Content-Type', 'text/srt; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    // s-maxage tells Vercel's edge to cache for 6h; stale-while-revalidate
+    // lets a stale copy serve while we regenerate in the background.
+    // The function only runs again every 6h per (URL, edge node), which
+    // is the single biggest Active CPU saving on this addon.
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400');
     res.setHeader('Content-Disposition', `inline; filename="dual_${mainLang}_${transLang}.srt"`);
     res.send(content);
   } catch (error) {
@@ -377,6 +381,13 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
       }));
     }
 
+    // Manifest-style response is essentially deterministic for a given
+    // (config, type, id) for at least an hour — Stremio polls this on
+    // every play and resume, so caching it on Vercel's edge is a major
+    // CPU saving for popular titles. We use a short max-age for the
+    // browser/Stremio (so config changes propagate fast) but a longer
+    // s-maxage on the edge.
+    res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=3600, stale-while-revalidate=21600');
     res.json(result);
   } catch (error) {
     debugServer.error('Error handling subtitle request:', sanitizeForLogging(error.message));
