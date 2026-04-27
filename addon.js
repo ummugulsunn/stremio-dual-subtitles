@@ -747,18 +747,12 @@ async function subtitlesHandler({ type, id, extra, config }) {
       `same-group: ${candidatePairs.filter(p => p.sameGroup).length}`
     );
 
-    // Run the quality gate. selectAndMergeBestPair fetches/parses each
-    // candidate pair, computes match rate, and stops when one clears
-    // the gate. This keeps cold-path latency bounded.
-    const best = await selectAndMergeBestPair(candidatePairs, mainLang, transLang);
-
-    if (!best || !best.merged || best.merged.length === 0 || !best.mergedSrt) {
-      debugServer.warn('No usable merged subtitle from any candidate pair');
-      return { subtitles: [] };
-    }
-
-    const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v1`;
-    storeSubtitle(cacheKey, best.mergedSrt);
+    // CPU-cheap path: do NOT fetch / parse / merge here. Just publish
+    // the URL of the best-ranked pair. The actual download + alignment
+    // happens once, on demand, when Stremio fetches the .srt URL. This
+    // halves Vercel Active CPU per dual-subtitle request, since the old
+    // code ran the entire pipeline twice (once here for nothing).
+    const best = candidatePairs[0];
 
     const dynamicParams = [
       type,
@@ -767,12 +761,12 @@ async function subtitlesHandler({ type, id, extra, config }) {
       episode || '0',
       mainLang,
       transLang,
-      best.mainSub.id,
-      best.transSub.id
+      best.main.id,
+      best.trans.id
     ].join('/');
 
     const finalSubtitles = [{
-      id: `dual-${best.mainSub.id}-${best.transSub.id}`,
+      id: `dual-${best.main.id}-${best.trans.id}`,
       url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
       lang: mainLang,
       SubtitlesName:
@@ -781,8 +775,8 @@ async function subtitlesHandler({ type, id, extra, config }) {
     }];
 
     debugServer.log(
-      `Created merged subtitle: matchRate=${(best.matchRate * 100).toFixed(1)}% ` +
-      `attempts=${best.attempts} passedGate=${best.passedGate}`
+      `Selected pair (no merge): main=${best.main.id} trans=${best.trans.id} ` +
+      `source=${best.source} sameGroup=${best.sameGroup}`
     );
 
     return {
@@ -801,10 +795,20 @@ builder.defineSubtitlesHandler(subtitlesHandler);
 
 /**
  * Generate merged subtitle dynamically (for serverless environments)
- * Called directly by URL - no cache dependency
+ * Called directly by URL. Results are cached in `subtitleCache` so any
+ * repeat hit on the same Vercel instance skips fetch + parse + merge
+ * entirely — even ahead of Vercel's edge cache (which ALSO caches via
+ * Cache-Control headers in server.js routes).
  */
 async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId) {
   debugServer.log('Dynamic subtitle generation:', { type, imdbId, mainLang, transLang });
+
+  const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_${mainSubId}_${transSubId}`;
+  const cached = getSubtitle(cacheKey);
+  if (cached) {
+    debugServer.log(`Cache hit (in-instance): ${cacheKey}`);
+    return cached;
+  }
 
   try {
     // Fetch all subtitles
@@ -868,7 +872,8 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
       `Generated ${best.merged.length} merged subtitle entries ` +
       `(matchRate=${(best.matchRate * 100).toFixed(1)}%, attempts=${best.attempts})`
     );
-    
+
+    if (srtContent) storeSubtitle(cacheKey, srtContent);
     return srtContent;
   } catch (error) {
     debugServer.error('Error generating dynamic subtitle:', sanitizeForLogging(error.message));

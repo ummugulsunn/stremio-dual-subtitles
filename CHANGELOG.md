@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- Halved Vercel Active CPU per dual-subtitle request. The previous flow ran the entire fetch + parse + merge pipeline twice — once in `subtitlesHandler` (whose result was thrown away after extracting a URL) and once in `generateDynamicSubtitle`. `subtitlesHandler` now only fetches the OpenSubtitles list and picks the top-ranked candidate pair via metadata; all heavy work happens once, on demand, when Stremio fetches the `.srt` URL.
+- Added `s-maxage` + `stale-while-revalidate` to subtitle routes so Vercel's edge cache can serve repeat requests for popular titles without invoking the function. `/subs/...srt` is cached on the edge for 6 hours, the manifest-style `/{config}/subtitles/...json` for 1 hour.
+- Added in-instance SRT cache lookup in `generateDynamicSubtitle`. Repeat hits on the same URL within an instance return in ≈0 ms instead of re-running fetch + parse + merge.
+
 ### Fixed
 
 - Android TV subtitle listing compatibility by using a standard single `lang` code for dual subtitles and clearer dual naming format (`#8`)
