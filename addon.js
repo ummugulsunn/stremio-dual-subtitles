@@ -77,13 +77,26 @@ function formatSrtSimple(subtitles) {
 }
 
 const { decodeSubtitleBuffer, getLanguageAliases, isCjkLanguage } = require('./encoding');
-const { 
-  languageMap, 
-  getLanguageOptions, 
-  extractBrowserLanguage, 
+const {
+  languageMap,
+  getLanguageOptions,
+  extractBrowserLanguage,
   parseLangCode,
-  getLanguageName 
+  getLanguageName
 } = require('./languages');
+const { alignAndMatch } = require('./lib/syncEngine');
+const { generateCandidatePairs } = require('./lib/sourceSelection');
+
+// Match rate at or above this is considered "good enough" — we stop
+// trying further candidate pairs. Empirically high-quality matches land
+// 90-99%, decent ones 80-90%, mismatched ones 45-70%. We pick 0.85 so
+// the gate trusts a clearly-high pair (1 attempt) but still spends a
+// second fetch to triangulate when the first is only "okay".
+const QUALITY_GATE_THRESHOLD = 0.85;
+// Hard cap on how many pairs we'll fetch+merge before giving up. Three
+// is enough to cover (best same-group, zipped-popularity, runner-up)
+// while keeping the serverless cold path bounded.
+const MAX_PAIR_ATTEMPTS = 3;
 
 // Configuration
 const ADDON_NAME = process.env.ADDON_NAME || 'Dual Subtitles';
@@ -393,77 +406,95 @@ function htmlEncodeSrt(text) {
 const DUAL_SUB_TRANS_COLOR = '#94a3b8';
 
 /**
- * Merge two subtitle arrays based on time overlap.
- * @param {Array} mainSubs - Primary language subtitles
- * @param {Array} transSubs - Translation language subtitles
- * @param {Object} options - Merge options
- * @param {number} options.mergeThresholdMs - Max ms gap to consider a match (default 500)
- * @param {string|null} options.mainLang - Primary language code for CJK-aware joining
- * @param {string|null} options.transLang - Translation language code for CJK-aware joining
+ * Merge two subtitle arrays into one, aligning the secondary track to the
+ * primary track's timebase before matching.
+ *
+ * The actual alignment work (global offset detection via cross-correlation,
+ * affine drift correction, and overlap-based bipartite assignment) is in
+ * lib/syncEngine.js. This function is a thin wrapper that converts SRT
+ * timestamp strings to milliseconds, runs the engine, and renders the
+ * dual-line SRT text.
+ *
+ * @param {Array} mainSubs - Primary language subtitles (SRT-time strings)
+ * @param {Array} transSubs - Translation language subtitles (SRT-time strings)
+ * @param {Object|number} options - Merge options (number = legacy threshold)
+ * @param {string|null} [options.mainLang]  - For CJK-aware line joining
+ * @param {string|null} [options.transLang] - For CJK-aware line joining
+ * @param {number}      [options.matchThresholdMs=1500]
+ * @param {boolean}     [options.allowMultiTrans=true]
+ *        If true, several short trans cues may be concatenated into one
+ *        primary cue (handles cue-boundary mismatches).
+ * @param {boolean}     [options.enableOffset=true]
+ * @param {boolean}     [options.enableDrift=true]
  */
 function mergeSubtitles(mainSubs, transSubs, options = {}) {
+  const opts = typeof options === 'number'
+    ? { matchThresholdMs: Math.max(options, 1500) }
+    : options;
+
   const {
-    mergeThresholdMs = 500,
     mainLang = null,
-    transLang = null
-  } = typeof options === 'number' ? { mergeThresholdMs: options } : options;
+    transLang = null,
+    matchThresholdMs = 1500,
+    allowMultiTrans = true,
+    enableOffset = true,
+    enableDrift = true
+  } = opts;
 
+  const mainTimed = [];
+  for (const s of mainSubs || []) {
+    if (!s || !s.startTime || !s.endTime) continue;
+    const startMs = parseTimeToMs(s.startTime);
+    const endMs = parseTimeToMs(s.endTime);
+    if (endMs <= startMs) continue;
+    mainTimed.push({ ...s, startMs, endMs });
+  }
+
+  const transTimed = [];
+  for (const s of transSubs || []) {
+    if (!s || !s.startTime || !s.endTime) continue;
+    const startMs = parseTimeToMs(s.startTime);
+    const endMs = parseTimeToMs(s.endTime);
+    if (endMs <= startMs) continue;
+    transTimed.push({ ...s, startMs, endMs });
+  }
+
+  const alignment = alignAndMatch(mainTimed, transTimed, {
+    enableOffset,
+    enableDrift,
+    matchThreshold: matchThresholdMs,
+    allowMultiTrans,
+    log: msg => debugServer.log(sanitizeForLogging(msg))
+  });
+  const { matches } = alignment;
+
+  const transJoiner = isCjkLanguage(transLang) ? '' : ' ';
   const mergedSubs = [];
-  let transIndex = 0;
 
-  for (const mainSub of mainSubs) {
-    if (!mainSub || !mainSub.startTime || !mainSub.endTime) continue;
-
-    const mainStartTime = parseTimeToMs(mainSub.startTime);
-    const mainEndTime = parseTimeToMs(mainSub.endTime);
-
-    let bestMatchIndex = -1;
-    let smallestTimeDiff = Infinity;
-
-    for (let i = transIndex; i < transSubs.length; i++) {
-      const transSub = transSubs[i];
-      if (!transSub || !transSub.startTime || !transSub.endTime) continue;
-
-      const transStartTime = parseTimeToMs(transSub.startTime);
-      const transEndTime = parseTimeToMs(transSub.endTime);
-
-      const startsOverlap = transStartTime >= mainStartTime && transStartTime < mainEndTime;
-      const endsOverlap = transEndTime > mainStartTime && transEndTime <= mainEndTime;
-      const isWithin = transStartTime >= mainStartTime && transEndTime <= mainEndTime;
-      const contains = transStartTime < mainStartTime && transEndTime > mainEndTime;
-      const timeDiff = Math.abs(mainStartTime - transStartTime);
-
-      if (startsOverlap || endsOverlap || isWithin || contains || timeDiff < mergeThresholdMs) {
-        if (timeDiff < smallestTimeDiff) {
-          smallestTimeDiff = timeDiff;
-          bestMatchIndex = i;
-        }
-      } else if (transStartTime > mainEndTime + mergeThresholdMs) {
-        break;
-      }
-
-      if (transEndTime < mainStartTime - mergeThresholdMs * 2 && i === transIndex) {
-        transIndex = i + 1;
-      }
-    }
+  for (let mi = 0; mi < mainTimed.length; mi++) {
+    const mainSub = mainTimed[mi];
 
     const cleanMainText = joinSubtitleLines(
       sanitize(mainSub.text, { allowedTags: [], allowedAttributes: {} }),
       mainLang
     );
-
     if (!cleanMainText) continue;
 
     let mergedText;
-
-    if (bestMatchIndex !== -1) {
-      const transSub = transSubs[bestMatchIndex];
-      const cleanTransText = joinSubtitleLines(
-        sanitize(transSub.text, { allowedTags: [], allowedAttributes: {} }),
-        transLang
-      );
-
-      if (cleanTransText) {
+    const transIdxs = matches.get(mi);
+    if (transIdxs && transIdxs.length > 0) {
+      const transParts = [];
+      for (const ti of transIdxs) {
+        const t = transTimed[ti];
+        if (!t) continue;
+        const piece = joinSubtitleLines(
+          sanitize(t.text, { allowedTags: [], allowedAttributes: {} }),
+          transLang
+        );
+        if (piece) transParts.push(piece);
+      }
+      if (transParts.length > 0) {
+        const cleanTransText = transParts.join(transJoiner);
         const encMain = htmlEncodeSrt(cleanMainText);
         const encTrans = htmlEncodeSrt(cleanTransText);
         mergedText =
@@ -478,11 +509,30 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
     if (!mergedText) continue;
 
     mergedSubs.push({
-      ...mainSub,
+      id: mainSub.id,
+      startTime: mainSub.startTime,
+      endTime: mainSub.endTime,
       text: mergedText
     });
   }
 
+  // Backwards compatible: callers that used `mergeSubtitles` as a plain
+  // array still iterate / .length / spread it as before. Quality-gate
+  // callers can read alignment metrics from non-enumerable properties.
+  Object.defineProperty(mergedSubs, 'matchRate', {
+    value: alignment.matchRate || 0,
+    enumerable: false
+  });
+  Object.defineProperty(mergedSubs, 'alignment', {
+    value: {
+      offsetMs: alignment.offsetMs,
+      drift: alignment.drift,
+      localAnchors: alignment.localAnchors,
+      matchedCount: matches.size,
+      mainCount: mainTimed.length
+    },
+    enumerable: false
+  });
   return mergedSubs;
 }
 
@@ -537,6 +587,90 @@ function getSubtitle(key) {
   }
   
   return entry.content;
+}
+
+/**
+ * Try candidate (main, trans) pairs in order. For each pair, fetch both
+ * subtitle files, parse them, and run mergeSubtitles. The first pair whose
+ * match rate clears QUALITY_GATE_THRESHOLD wins; otherwise we return the
+ * best pair we saw, capped at MAX_PAIR_ATTEMPTS.
+ *
+ * Each fetched subtitle is cached in `parsedCache` so retrying with the
+ * same main against a different trans (or vice versa) doesn't re-download.
+ *
+ * @param {Array} candidatePairs    output of generateCandidatePairs
+ * @param {string} mainLang
+ * @param {string} transLang
+ * @returns {Promise<{
+ *   merged: Array, mergedSrt: string, matchRate: number,
+ *   mainSub: object, transSub: object, attempts: number,
+ *   passedGate: boolean
+ * } | null>}
+ */
+async function selectAndMergeBestPair(candidatePairs, mainLang, transLang) {
+  if (!Array.isArray(candidatePairs) || candidatePairs.length === 0) return null;
+
+  const parsedCache = new Map();
+  async function getParsed(sub, lang) {
+    if (parsedCache.has(sub.id)) return parsedCache.get(sub.id);
+    const content = await fetchSubtitleContent(sub.url, lang);
+    const parsed = content ? parseSrt(content) : null;
+    parsedCache.set(sub.id, parsed);
+    return parsed;
+  }
+
+  let best = null;
+  const attempts = Math.min(candidatePairs.length, MAX_PAIR_ATTEMPTS);
+
+  for (let i = 0; i < attempts; i++) {
+    const pair = candidatePairs[i];
+    debugServer.log(
+      `Pair attempt ${i + 1}/${attempts}: main=${pair.main.id} trans=${pair.trans.id} ` +
+      `source=${pair.source} sameGroup=${pair.sameGroup} g=${pair.group}`
+    );
+
+    const [mainParsed, transParsed] = await Promise.all([
+      getParsed(pair.main, mainLang),
+      getParsed(pair.trans, transLang)
+    ]);
+    if (!mainParsed || mainParsed.length === 0) {
+      debugServer.warn(`  main subtitle ${pair.main.id} unparsable, skipping`);
+      continue;
+    }
+    if (!transParsed || transParsed.length === 0) {
+      debugServer.warn(`  trans subtitle ${pair.trans.id} unparsable, skipping`);
+      continue;
+    }
+
+    const merged = mergeSubtitles(mainParsed, transParsed, { mainLang, transLang });
+    const matchRate = merged && merged.matchRate != null ? merged.matchRate : 0;
+    debugServer.log(`  match rate: ${(matchRate * 100).toFixed(1)}%`);
+
+    if (!best || matchRate > best.matchRate) {
+      best = {
+        merged,
+        mergedSrt: merged && merged.length > 0 ? formatSrt(merged) : null,
+        matchRate,
+        mainSub: pair.main,
+        transSub: pair.trans,
+        attempts: i + 1,
+        passedGate: matchRate >= QUALITY_GATE_THRESHOLD
+      };
+    }
+    if (matchRate >= QUALITY_GATE_THRESHOLD) {
+      debugServer.log(`  passed quality gate, stopping`);
+      break;
+    }
+  }
+
+  if (best) {
+    debugServer.log(
+      `Selected pair: main=${best.mainSub.id} trans=${best.transSub.id} ` +
+      `matchRate=${(best.matchRate * 100).toFixed(1)}% attempts=${best.attempts} ` +
+      `passedGate=${best.passedGate}`
+    );
+  }
+  return best;
 }
 
 // Subtitle handler function
@@ -598,94 +732,58 @@ async function subtitlesHandler({ type, id, extra, config }) {
 
     debugServer.log(`Found ${allSubtitles.length} total subtitles`);
 
-    // Filter by languages
-    const mainSubList = filterSubtitlesByLanguage(allSubtitles, mainLang);
-    const transSubList = filterSubtitlesByLanguage(allSubtitles, transLang);
+    // Build the ordered list of (main, trans) candidates. Same-`g`
+    // (same release) pairs come first; this is our biggest single
+    // accuracy win on titles like Sopranos S01E03.
+    const candidatePairs = generateCandidatePairs(allSubtitles, mainLang, transLang);
 
-    if (!mainSubList || mainSubList.length === 0) {
-      debugServer.warn(`No ${mainLang} subtitles found`);
+    if (candidatePairs.length === 0) {
+      debugServer.warn(`No ${mainLang}/${transLang} candidate pairs available`);
       return { subtitles: [] };
     }
 
-    if (!transSubList || transSubList.length === 0) {
-      debugServer.warn(`No ${transLang} subtitles found`);
+    debugServer.log(
+      `Built ${candidatePairs.length} candidate pair(s); ` +
+      `same-group: ${candidatePairs.filter(p => p.sameGroup).length}`
+    );
+
+    // Run the quality gate. selectAndMergeBestPair fetches/parses each
+    // candidate pair, computes match rate, and stops when one clears
+    // the gate. This keeps cold-path latency bounded.
+    const best = await selectAndMergeBestPair(candidatePairs, mainLang, transLang);
+
+    if (!best || !best.merged || best.merged.length === 0 || !best.mergedSrt) {
+      debugServer.warn('No usable merged subtitle from any candidate pair');
       return { subtitles: [] };
     }
 
-    debugServer.log(`Found ${mainSubList.length} ${mainLang} and ${transSubList.length} ${transLang} subtitles`);
+    const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v1`;
+    storeSubtitle(cacheKey, best.mergedSrt);
 
-    // Process and create merged subtitles
-    const finalSubtitles = [];
-    const usedTransUrls = new Set();
+    const dynamicParams = [
+      type,
+      imdbId,
+      season || '0',
+      episode || '0',
+      mainLang,
+      transLang,
+      best.mainSub.id,
+      best.transSub.id
+    ].join('/');
 
-    // Find a valid main subtitle first
-    let mainParsed = null;
-    let selectedMainSub = null;
+    const finalSubtitles = [{
+      id: `dual-${best.mainSub.id}-${best.transSub.id}`,
+      url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
+      lang: mainLang,
+      SubtitlesName:
+        `Dual (${mainLang.toUpperCase()}+${transLang.toUpperCase()}) - ` +
+        `${getLanguageName(mainLang)} + ${getLanguageName(transLang)}`
+    }];
 
-    for (const mainSubInfo of mainSubList) {
-      const content = await fetchSubtitleContent(mainSubInfo.url, mainSubInfo.lang);
-      if (!content) continue;
-
-      const parsed = parseSrt(content);
-      if (!parsed || parsed.length === 0) continue;
-
-      mainParsed = parsed;
-      selectedMainSub = mainSubInfo;
-      debugServer.log(`Using main subtitle: ${mainSubInfo.id}`);
-      break;
-    }
-
-    if (!mainParsed) {
-      debugServer.warn('Could not process any main subtitle');
-      return { subtitles: [] };
-    }
-
-    // Process translations (1 version for speed - serverless optimization)
-    for (const transSubInfo of transSubList) {
-      if (finalSubtitles.length >= 1) break;
-      if (usedTransUrls.has(transSubInfo.url)) continue;
-      usedTransUrls.add(transSubInfo.url);
-
-      const version = finalSubtitles.length + 1;
-      debugServer.log(`Processing translation v${version}...`);
-
-      const transContent = await fetchSubtitleContent(transSubInfo.url, transSubInfo.lang);
-      if (!transContent) continue;
-
-      const transParsed = parseSrt(transContent);
-      if (!transParsed || transParsed.length === 0) continue;
-
-      const merged = mergeSubtitles([...mainParsed], transParsed, { mainLang, transLang });
-      if (!merged || merged.length === 0) continue;
-
-      const mergedSrt = formatSrt(merged);
-      if (!mergedSrt) continue;
-
-      // Store in cache (for local/backup)
-      const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_v${version}`;
-      storeSubtitle(cacheKey, mergedSrt);
-
-      // Use dynamic URL that regenerates subtitle on each request (for serverless)
-      const dynamicParams = [
-        type,
-        imdbId,
-        season || '0',
-        episode || '0',
-        mainLang,
-        transLang,
-        selectedMainSub.id,
-        transSubInfo.id
-      ].join('/');
-
-      finalSubtitles.push({
-        id: `dual-${selectedMainSub.id}-${transSubInfo.id}`,
-        url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
-        lang: mainLang,
-        SubtitlesName: `Dual (${mainLang.toUpperCase()}+${transLang.toUpperCase()}) - ${getLanguageName(mainLang)} + ${getLanguageName(transLang)}`
-      });
-    }
-
-    debugServer.log(`Created ${finalSubtitles.length} merged subtitle(s)`);
+    debugServer.log(
+      `Created merged subtitle: matchRate=${(best.matchRate * 100).toFixed(1)}% ` +
+      `attempts=${best.attempts} passedGate=${best.passedGate}`
+    );
 
     return {
       subtitles: finalSubtitles,
@@ -722,60 +820,54 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
       return null;
     }
 
-    // Find the specific subtitle files by ID
-    const mainSubInfo = allSubtitles.find(s => String(s.id) === String(mainSubId));
-    const transSubInfo = allSubtitles.find(s => String(s.id) === String(transSubId));
+    // Build candidate pairs for this title; we'll start by trying the
+    // exact pair encoded in the URL (the one subtitlesHandler picked),
+    // then fall back to other candidates if the match rate is too low.
+    const candidatePairs = generateCandidatePairs(allSubtitles, mainLang, transLang);
 
-    if (!mainSubInfo || !transSubInfo) {
-      debugServer.warn('Specific subtitles not found, trying by language');
-      // Fallback: get best match by language
-      const mainSubList = filterSubtitlesByLanguage(allSubtitles, mainLang);
-      const transSubList = filterSubtitlesByLanguage(allSubtitles, transLang);
-      
-      if (!mainSubList || !transSubList) {
-        return null;
-      }
+    const requestedMain = allSubtitles.find(s => String(s.id) === String(mainSubId));
+    const requestedTrans = allSubtitles.find(s => String(s.id) === String(transSubId));
 
-      // Use first available
-      const mainContent = await fetchSubtitleContent(mainSubList[0].url, mainLang);
-      const transContent = await fetchSubtitleContent(transSubList[0].url, transLang);
-
-      if (!mainContent || !transContent) return null;
-
-      const mainParsed = parseSrt(mainContent);
-      const transParsed = parseSrt(transContent);
-
-      if (!mainParsed || !transParsed) return null;
-
-      const merged = mergeSubtitles(mainParsed, transParsed, { mainLang, transLang });
-      return formatSrt(merged);
+    let orderedPairs = candidatePairs;
+    if (requestedMain && requestedTrans) {
+      // Move the URL-requested pair to the front (or insert it if it
+      // wasn't in the candidate list, e.g. addon was upgraded mid-cache).
+      const isSameGroup =
+        requestedMain.g === requestedTrans.g && requestedMain.g != null;
+      const head = {
+        main: requestedMain,
+        trans: requestedTrans,
+        sameGroup: isSameGroup,
+        group: isSameGroup ? requestedMain.g : null,
+        source: 'requested'
+      };
+      orderedPairs = [
+        head,
+        ...candidatePairs.filter(
+          p => !(String(p.main.id) === String(mainSubId) &&
+                 String(p.trans.id) === String(transSubId))
+        )
+      ];
+    } else {
+      debugServer.warn(
+        'Requested specific pair not present in fresh subtitle list; ' +
+        'falling back to ranked candidates'
+      );
     }
 
-    // Fetch and parse both subtitle files
-    const mainContent = await fetchSubtitleContent(mainSubInfo.url, mainLang);
-    const transContent = await fetchSubtitleContent(transSubInfo.url, transLang);
+    if (orderedPairs.length === 0) return null;
 
-    if (!mainContent || !transContent) {
-      debugServer.warn('Could not fetch subtitle content');
+    const best = await selectAndMergeBestPair(orderedPairs, mainLang, transLang);
+    if (!best || !best.merged || best.merged.length === 0) {
+      debugServer.warn('No usable merged subtitle from any pair');
       return null;
     }
 
-    const mainParsed = parseSrt(mainContent);
-    const transParsed = parseSrt(transContent);
-
-    if (!mainParsed || !transParsed || mainParsed.length === 0 || transParsed.length === 0) {
-      debugServer.warn('Could not parse subtitles');
-      return null;
-    }
-
-    const merged = mergeSubtitles(mainParsed, transParsed, { mainLang, transLang });
-    if (!merged || merged.length === 0) {
-      debugServer.warn('Merge failed');
-      return null;
-    }
-
-    const srtContent = formatSrt(merged);
-    debugServer.log(`Generated ${merged.length} merged subtitle entries`);
+    const srtContent = best.mergedSrt;
+    debugServer.log(
+      `Generated ${best.merged.length} merged subtitle entries ` +
+      `(matchRate=${(best.matchRate * 100).toFixed(1)}%, attempts=${best.attempts})`
+    );
     
     return srtContent;
   } catch (error) {
