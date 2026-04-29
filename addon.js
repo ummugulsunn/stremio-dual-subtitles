@@ -13,49 +13,87 @@ const { debugServer, sanitizeForLogging } = require('./lib/debug');
 /**
  * Simple SRT parser (more reliable than external libraries)
  */
+function parseTimestampLine(line) {
+  if (!line || typeof line !== 'string') return null;
+  if (!line.includes('-->')) return null;
+
+  const timePattern = '(\\d{1,2}:\\d{2}:\\d{2}[,.]\\d{1,3})';
+  const match = line.match(new RegExp(`^\\s*${timePattern}\\s*-->\\s*${timePattern}`));
+  if (!match) return null;
+
+  const startMs = parseTimeToMs(match[1]);
+  const endMs = parseTimeToMs(match[2]);
+
+  return {
+    startTime: msToSrtTime(startMs),
+    endTime: msToSrtTime(endMs)
+  };
+}
+
 function parseSrtSimple(srtText) {
   const lines = srtText.trim().split('\n');
   const subtitles = [];
   let current = null;
-  
+  let pendingId = null;
+
+  function pushCurrent() {
+    if (
+      current &&
+      current.startTime &&
+      current.endTime &&
+      typeof current.text === 'string' &&
+      current.text.trim()
+    ) {
+      subtitles.push(current);
+    }
+    current = null;
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
-    // Skip empty lines
+    const timing = parseTimestampLine(line);
+
+    // Empty line => cue boundary
     if (!line) {
-      if (current && current.text) {
-        subtitles.push(current);
-        current = null;
-      }
+      pushCurrent();
+      pendingId = null;
       continue;
     }
-    
-    // Check if it's a sequence number
-    if (!current && /^\d+$/.test(line)) {
-      current = { id: line, text: '' };
+
+    // Timestamp line starts a new cue
+    if (timing) {
+      pushCurrent();
+      current = {
+        id: pendingId || String(subtitles.length + 1),
+        startTime: timing.startTime,
+        endTime: timing.endTime,
+        text: ''
+      };
+      pendingId = null;
       continue;
     }
-    
-    // Check if it's a timestamp line
-    if (current && !current.startTime && line.includes('-->')) {
-      const [start, end] = line.split('-->').map(s => s.trim());
-      current.startTime = start;
-      current.endTime = end;
+
+    // Cue IDs are optional in the wild. If the *next* line is a
+    // timestamp, treat the current line as the cue id (even if it's not
+    // numeric, e.g. VTT named IDs).
+    const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+    if (parseTimestampLine(nextLine)) {
+      if (current) pushCurrent();
+      pendingId = line;
       continue;
     }
-    
+
+    // Ignore preamble/garbage until a cue is started.
+    if (!current) continue;
+
     // Otherwise it's text
-    if (current && current.startTime) {
-      if (current.text) current.text += '\n';
-      current.text += line;
-    }
+    if (current.text) current.text += '\n';
+    current.text += line;
   }
-  
+
   // Add last subtitle if exists
-  if (current && current.text) {
-    subtitles.push(current);
-  }
-  
+  pushCurrent();
+
   return subtitles;
 }
 
@@ -86,6 +124,36 @@ const {
 } = require('./languages');
 const { alignAndMatch } = require('./lib/syncEngine');
 const { generateCandidatePairs } = require('./lib/sourceSelection');
+
+// Optional video-matching parameters (forwarded from Stremio extras).
+// These help OpenSubtitles pick the right release variant for the exact
+// video file the user is playing.
+const VIDEO_PARAM_KEYS = ['filename', 'videoSize', 'videoHash'];
+
+function normalizeVideoParams(params = {}) {
+  const normalized = {};
+  if (!params || typeof params !== 'object') return normalized;
+
+  for (const key of VIDEO_PARAM_KEYS) {
+    let value = params[key];
+    if (Array.isArray(value)) value = value[0];
+    if (value == null) continue;
+
+    const s = String(value).trim();
+    if (!s) continue;
+    normalized[key] = s;
+  }
+  return normalized;
+}
+
+function serializeVideoParams(params = {}) {
+  const normalized = normalizeVideoParams(params);
+  const search = new URLSearchParams();
+  for (const key of VIDEO_PARAM_KEYS) {
+    if (normalized[key]) search.set(key, normalized[key]);
+  }
+  return search.toString();
+}
 
 // Match rate at or above this is considered "good enough" — we stop
 // trying further candidate pairs. Empirically high-quality matches land
@@ -170,9 +238,12 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
 
   // Add query params for better matching
   const queryParams = [];
-  if (videoParams.filename) queryParams.push(`filename=${encodeURIComponent(videoParams.filename)}`);
-  if (videoParams.videoSize) queryParams.push(`videoSize=${videoParams.videoSize}`);
-  if (videoParams.videoHash) queryParams.push(`videoHash=${videoParams.videoHash}`);
+  const normalizedVideoParams = normalizeVideoParams(videoParams);
+  if (normalizedVideoParams.filename) {
+    queryParams.push(`filename=${encodeURIComponent(normalizedVideoParams.filename)}`);
+  }
+  if (normalizedVideoParams.videoSize) queryParams.push(`videoSize=${normalizedVideoParams.videoSize}`);
+  if (normalizedVideoParams.videoHash) queryParams.push(`videoHash=${normalizedVideoParams.videoHash}`);
   
   if (queryParams.length > 0) {
     apiUrl += `/${queryParams.join('&')}`;
@@ -720,6 +791,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
       videoSize: extra?.videoSize,
       videoHash: extra?.videoHash
     };
+    const videoQuery = serializeVideoParams(videoParams);
 
     // Fetch all subtitles
     debugServer.log('Fetching subtitles from OpenSubtitles...');
@@ -767,7 +839,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
 
     const finalSubtitles = [{
       id: `dual-${best.main.id}-${best.trans.id}`,
-      url: `{{ADDON_URL}}/subs/${dynamicParams}.srt`,
+      url: `{{ADDON_URL}}/subs/${dynamicParams}.srt${videoQuery ? `?${videoQuery}` : ''}`,
       lang: mainLang,
       SubtitlesName:
         `Dual (${mainLang.toUpperCase()}+${transLang.toUpperCase()}) - ` +
@@ -800,10 +872,24 @@ builder.defineSubtitlesHandler(subtitlesHandler);
  * entirely — even ahead of Vercel's edge cache (which ALSO caches via
  * Cache-Control headers in server.js routes).
  */
-async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId) {
+async function generateDynamicSubtitle(
+  type,
+  imdbId,
+  season,
+  episode,
+  mainLang,
+  transLang,
+  mainSubId,
+  transSubId,
+  videoParams = {}
+) {
   debugServer.log('Dynamic subtitle generation:', { type, imdbId, mainLang, transLang });
 
-  const cacheKey = `${imdbId}_${season || ''}_${episode || ''}_${mainLang}_${transLang}_${mainSubId}_${transSubId}`;
+  const videoCacheFragment = serializeVideoParams(videoParams);
+  const cacheKey =
+    `${imdbId}_${season || ''}_${episode || ''}` +
+    `_${mainLang}_${transLang}_${mainSubId}_${transSubId}` +
+    `_${videoCacheFragment || ''}`;
   const cached = getSubtitle(cacheKey);
   if (cached) {
     debugServer.log(`Cache hit (in-instance): ${cacheKey}`);
@@ -812,11 +898,13 @@ async function generateDynamicSubtitle(type, imdbId, season, episode, mainLang, 
 
   try {
     // Fetch all subtitles
+    const normalizedVideoParams = normalizeVideoParams(videoParams);
     const allSubtitles = await fetchAllSubtitles(
       imdbId, 
       type, 
       season !== '0' ? season : null, 
-      episode !== '0' ? episode : null
+      episode !== '0' ? episode : null,
+      normalizedVideoParams
     );
 
     if (!allSubtitles) {
