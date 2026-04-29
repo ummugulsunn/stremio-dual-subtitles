@@ -282,12 +282,21 @@ app.get('/subtitles/:filename', (req, res) => {
 // URL format: /subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:transSubId.srt
 app.get('/subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:transSubId.srt', async (req, res) => {
   const { type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId } = req.params;
+
+  // Optional video matching params (forwarded as query-string by the
+  // subtitles handler). These help OpenSubtitles pick the right
+  // release variant for the specific video.
+  const videoParams = {
+    filename: req.query && req.query.filename ? req.query.filename : undefined,
+    videoSize: req.query && req.query.videoSize ? req.query.videoSize : undefined,
+    videoHash: req.query && req.query.videoHash ? req.query.videoHash : undefined
+  };
   
   debugServer.log(`Dynamic subtitle request: ${type}/${imdbId} ${mainLang}+${transLang}`);
   
   try {
     const content = await generateDynamicSubtitle(
-      type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId
+      type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId, videoParams
     );
     
     if (!content) {
@@ -398,29 +407,24 @@ app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
 // Parse extra parameters from URL
 function parseExtra(extraStr) {
   const extra = {};
-  
-  // Handle the format: videoHash.videoSize.filename or just extra params
-  const parts = extraStr.split('.');
-  
-  // Try to parse as key=value pairs
-  for (const part of parts) {
-    if (part.includes('=')) {
-      const [key, value] = part.split('=');
-      extra[key] = value;
-    }
+  if (!extraStr) return extra;
+
+  // Stremio passes addon extras as a path segment (not a real query
+  // string). Older formats use dots as separators. The tricky bit is
+  // filenames themselves contain dots, so we must only replace dots
+  // that appear *before a known key= sequence*.
+  const normalized = extraStr.replace(
+    /\.(?=(?:videoHash|videoSize|filename|imdbId|season|episode)=)/g,
+    '&'
+  );
+
+  // Now we can safely parse via URLSearchParams (handles URL encoding
+  // and dotted filenames).
+  const params = new URLSearchParams(normalized);
+  for (const [key, value] of params.entries()) {
+    if (key && value != null) extra[key] = value;
   }
-  
-  // Also handle query-style params
-  if (extraStr.includes('&')) {
-    const params = extraStr.split('&');
-    for (const param of params) {
-      if (param.includes('=')) {
-        const [key, value] = param.split('=');
-        extra[key] = decodeURIComponent(value);
-      }
-    }
-  }
-  
+
   return extra;
 }
 
