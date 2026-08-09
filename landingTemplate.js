@@ -1391,7 +1391,6 @@ function generateLandingHTML(manifest, baseUrl, publicStats) {
       'Romanian [rum]': 'Bună, ce mai faci azi?',
       'Bulgarian [bul]': 'Здравей, как си днес?',
       'Ukrainian [ukr]': 'Привіт, як справи сьогодні?',
-      'Hebrew [heb]': 'שלום, מה שלומך היום?',
       'Thai [tha]': 'สวัสดี วันนี้เป็นอย่างไรบ้าง?',
       'Vietnamese [vie]': 'Xin chào, hôm nay bạn thế nào?',
       'Indonesian [ind]': 'Halo, apa kabar hari ini?',
