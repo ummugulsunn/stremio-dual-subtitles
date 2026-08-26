@@ -1343,7 +1343,7 @@ function generateLandingHTML(manifest, baseUrl, publicStats) {
       <a href="https://github.com/ummugulsunn/stremio-dual-subtitles" target="_blank">GitHub</a>
       <a href="${baseUrl}/privacy">Privacy</a>
       <a href="https://www.stremio.com/" target="_blank">Get Stremio</a>
-      <a href="https://ko-fi.com/ummugulsunn" target="_blank">Donate ❤️</a>
+      <a href="https://ko-fi.com/ummugulsunn" target="_blank">Support ❤️</a>
     </div>
     <div class="footer-copy">v${manifest.version} • Made for language learners</div>
   </footer>
