@@ -229,7 +229,7 @@ async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 500) {
 /**
  * Fetch all subtitles from OpenSubtitles API.
  */
-async function fetchAllSubtitles(imdbId, type, season = null, episode = null, videoParams = {}) {
+async function fetchAllSubtitles(imdbId, type, season = null, episode = null, videoParams = {}, mainLang = null, transLang = null) {
   let apiUrl = `https://opensubtitles-v3.strem.io/subtitles/${type}/tt${imdbId}`;
 
   if (type === 'series' && season && episode) {
@@ -244,25 +244,41 @@ async function fetchAllSubtitles(imdbId, type, season = null, episode = null, vi
   }
   if (normalizedVideoParams.videoSize) queryParams.push(`videoSize=${normalizedVideoParams.videoSize}`);
   if (normalizedVideoParams.videoHash) queryParams.push(`videoHash=${normalizedVideoParams.videoHash}`);
-  
+
   if (queryParams.length > 0) {
     apiUrl += `/${queryParams.join('&')}`;
   }
-  
+
   apiUrl += '.json';
 
+  let primarySubs = [];
   try {
     const response = await fetchWithRetry(apiUrl, { timeout: 15000 });
-    
-    if (!response.data || !response.data.subtitles || response.data.subtitles.length === 0) {
-      return null;
+    if (response.data && Array.isArray(response.data.subtitles)) {
+      primarySubs = response.data.subtitles;
     }
-
-    return response.data.subtitles;
   } catch (error) {
     debugServer.error('Error fetching subtitles:', sanitizeForLogging(error.message));
-    return null;
   }
+
+  // Fallback: only hit the secondary mirror if the primary source is
+  // missing coverage for a language we actually need. Keeps the
+  // already-working path (most titles) at one network call.
+  const missingMain = mainLang && !primarySubs.some(s => s.lang === mainLang);
+  const missingTrans = transLang && !primarySubs.some(s => s.lang === transLang);
+
+  let secondarySubs = [];
+  if (missingMain || missingTrans) {
+    const { fetchSecondarySubtitles } = require('./lib/secondarySource');
+    debugServer.log(`Primary source missing coverage (main=${missingMain}, trans=${missingTrans}), trying secondary source`);
+    secondarySubs = await fetchSecondarySubtitles(imdbId, type, mainLang, transLang);
+    if (secondarySubs.length > 0) {
+      debugServer.log(`Secondary source added ${secondarySubs.length} subtitle(s)`);
+    }
+  }
+
+  const combined = primarySubs.concat(secondarySubs);
+  return combined.length > 0 ? combined : null;
 }
 
 /**
@@ -430,7 +446,7 @@ function parseSrt(srtText) {
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
 
     // Filter out ads
-    const adKeywords = ['OpenSubtitles.org', 'OpenSubtitles.com', 'osdb.link', 'Advertise your'];
+    const adKeywords = ['OpenSubtitles.org', 'OpenSubtitles.com', 'osdb.link', 'Advertise your', 'OpenSubtitles v3+'];
     const filtered = parsed.filter(sub => 
       !adKeywords.some(keyword => (sub.text || '').includes(keyword))
     );
@@ -795,7 +811,7 @@ async function subtitlesHandler({ type, id, extra, config }) {
 
     // Fetch all subtitles
     debugServer.log('Fetching subtitles from OpenSubtitles...');
-    const allSubtitles = await fetchAllSubtitles(imdbId, type, season, episode, videoParams);
+    const allSubtitles = await fetchAllSubtitles(imdbId, type, season, episode, videoParams, mainLang, transLang);
 
     if (!allSubtitles) {
       debugServer.warn('No subtitles found');
@@ -900,11 +916,13 @@ async function generateDynamicSubtitle(
     // Fetch all subtitles
     const normalizedVideoParams = normalizeVideoParams(videoParams);
     const allSubtitles = await fetchAllSubtitles(
-      imdbId, 
-      type, 
-      season !== '0' ? season : null, 
+      imdbId,
+      type,
+      season !== '0' ? season : null,
       episode !== '0' ? episode : null,
-      normalizedVideoParams
+      normalizedVideoParams,
+      mainLang,
+      transLang
     );
 
     if (!allSubtitles) {
