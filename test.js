@@ -312,8 +312,83 @@ test('Dual merge distinguishes lines: bold primary, marker, colored secondary [I
   assert.ok(result[0].text.includes('<b>Hello</b>'), 'primary line should be bold');
   assert.ok(result[0].text.includes('\u203a '), 'secondary line should include a visible marker');
   assert.ok(
-    result[0].text.includes(`<font color="#94a3b8">`),
+    result[0].text.includes(`<font color='#94a3b8'>`),
     'secondary should use a muted color where the player supports it'
+  );
+});
+
+test('mergeSubtitles: does not encode quotes, preserves literal " and \' [Issue #10]', () => {
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: 'She said "hi" don\'t go' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: 'Ella dijo "hola" no te vayas' }
+  ];
+  const result = mergeSubtitles(main, trans, { mainLang: 'eng', transLang: 'spa' });
+  assert.strictEqual(result.length, 1);
+  assert.ok(
+    !result[0].text.includes('&quot;'),
+    'merged text must not contain literal &quot; entity'
+  );
+  assert.ok(
+    !result[0].text.includes('&amp;quot;'),
+    'merged text must not contain double-encoded &amp;quot; entity'
+  );
+  assert.ok(
+    result[0].text.includes('She said "hi" don\'t go'),
+    'primary quotes must be preserved verbatim'
+  );
+  assert.ok(
+    result[0].text.includes('Ella dijo "hola" no te vayas'),
+    'secondary quotes must be preserved verbatim'
+  );
+});
+
+test('mergeSubtitles: still escapes <, > and & to keep SRT markup safe [Issue #10]', () => {
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: 'Tom & Jerry <3 adventures' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: 'Tom y Jerry > aventuras' }
+  ];
+  const result = mergeSubtitles(main, trans, { mainLang: 'eng', transLang: 'spa' });
+  assert.strictEqual(result.length, 1);
+  // <3 must be encoded so it's not interpreted as a malformed HTML tag.
+  // We accept either the single-encoded (&lt;3) or double-encoded
+  // (&amp;lt;3) form — the exact nesting level is a separate concern.
+  assert.ok(
+    result[0].text.includes('&lt;3') || result[0].text.includes('&amp;lt;3'),
+    'less-than must be escaped (single or double encoding)'
+  );
+  assert.ok(
+    result[0].text.includes('&gt;') || result[0].text.includes('&amp;gt;'),
+    'greater-than must be escaped'
+  );
+});
+
+test('mergeSubtitles: decodes pre-existing &quot; from source without double-encoding [Issue #10]', () => {
+  // Some source SRTs contain literal `&quot;` entities. sanitize-html
+  // decodes them once; the merge output should keep the resulting `"`
+  // as-is rather than re-encoding it.
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: '&quot;Hello&quot; she said' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:04,000', text: '&quot;Hola&quot; dijo' }
+  ];
+  const result = mergeSubtitles(main, trans, { mainLang: 'eng', transLang: 'spa' });
+  assert.strictEqual(result.length, 1);
+  assert.ok(
+    !result[0].text.includes('&quot;'),
+    'decoded quotes must not be re-encoded'
+  );
+  assert.ok(
+    !result[0].text.includes('&amp;quot;'),
+    'decoded quotes must not be double-encoded to &amp;quot;'
+  );
+  assert.ok(
+    result[0].text.includes('"Hello" she said'),
+    'source entities should be rendered as literal quotes'
   );
 });
 

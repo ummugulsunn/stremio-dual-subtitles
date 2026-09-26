@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Android TV subtitle listing compatibility by using a standard single `lang` code for dual subtitles and clearer dual naming format (`#8`)
 - Clearer visual distinction between primary and secondary lines in merged SRT (`<b>`, muted color, and a `›` marker) for clients that support basic SRT HTML (`#9`)
+- Literal `&quot;` (and double-encoded `&amp;quot;`) appearing in merged subtitles on clients that don't decode HTML entities (most Stremio TV / web / mobile clients). `htmlEncodeSrt` no longer escapes quote characters in cue text; the `<font color='…'>` attribute in the merge template now uses single quotes so text containing `"` cannot break it. Source-side entities like `&quot;` are still decoded by `sanitize-html` once and kept verbatim instead of being re-encoded.
 - Dual-subtitle desync between two language tracks taken from different releases. Replaced the single-pass nearest-start-time matcher with a multi-stage alignment engine (`lib/syncEngine.js`):
   - **Stage 1 — global offset:** cross-correlation of cue presence signals detects a uniform shift between the tracks (the most common failure mode, e.g. The Sopranos S01E03 ENG+TUR where the entire translation was off by ~2.5s).
   - **Stage 2 — linear drift:** least-squares affine fit on anchor pairs corrects framerate-mismatch drift (e.g. 23.976 vs 25 fps).

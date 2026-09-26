@@ -463,14 +463,25 @@ function joinSubtitleLines(text, langCode) {
   return text.replace(/\r?\n|\r/g, cjk ? '' : ' ').trim();
 }
 
-/** Escape text embedded in SRT HTML tags (avoid breaking markup / injection). */
+/** Escape text embedded in SRT HTML tags (avoid breaking markup / injection).
+ *  Only the characters that are structurally significant inside cue text are
+ *  escaped: `&`, `<`, `>`. Quote characters are left verbatim because:
+ *    - SRT cue text is not an HTML attribute value, so `"` and `'` don't need
+ *      to be escaped there.
+ *    - Encoding `"` to `&quot;` caused a double-encoding artifact when the
+ *      source subtitle already contained literal entities (e.g. `&quot;`): the
+ *      entity was decoded once by sanitize-html, re-encoded here, and then
+ *      rendered as literal `&quot;` on clients that don't decode entities
+ *      (most Stremio TV / web / mobile clients). The `<font color='…'>`
+ *      attribute uses single quotes so that user text containing `"` cannot
+ *      break the attribute.
+ */
 function htmlEncodeSrt(text) {
   if (!text) return '';
   return String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/>/g, '&gt;');
 }
 
 /** Muted color for secondary line; players that ignore <font> still have <b> + › marker. */
@@ -569,7 +580,7 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
         const encMain = htmlEncodeSrt(cleanMainText);
         const encTrans = htmlEncodeSrt(cleanTransText);
         mergedText =
-          `<b>${encMain}</b>\n\u203a <i><font color="${DUAL_SUB_TRANS_COLOR}">${encTrans}</font></i>`;
+          `<b>${encMain}</b>\n\u203a <i><font color='${DUAL_SUB_TRANS_COLOR}'>${encTrans}</font></i>`;
       }
     }
 
