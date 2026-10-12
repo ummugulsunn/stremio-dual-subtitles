@@ -444,6 +444,7 @@ A: Open an issue on [GitHub](https://github.com/ummugulsunn/stremio-dual-subtitl
 3. **Reinstall addon**: Remove and reinstall the addon in Stremio
 4. **Clear Stremio cache**: Settings > Clear Cache in Stremio
 5. **Check language selection**: Ensure you selected two different languages
+6. **Rare titles**: if the primary OpenSubtitles index has no subtitles for your chosen language, the addon automatically tries a secondary mirror with broader coverage before giving up. Set `SECONDARY_SOURCE_ENABLED=false` in `.env` to disable this fallback.
 
 ### Encoding Issues (Garbled Text)
 
