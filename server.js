@@ -21,7 +21,7 @@ const {
 const { generateStatsHTML, generatePrivacyHTML, generateErrorHTML } = require('./lib/templates');
 const { builder, manifest, getSubtitle, subtitlesHandler, generateDynamicSubtitle } = require('./addon');
 const generateLandingHTML = require('./landingTemplate');
-const { parseLangCode } = require('./languages');
+const { parseLangCode, getLanguageOptions } = require('./languages');
 
 // Configuration
 const PORT = process.env.PORT || 7000;
@@ -63,11 +63,18 @@ app.use(compression());
 // JSON body parser for API endpoints
 app.use(express.json());
 
-// CORS middleware
+// CORS for the addon/API surface (Stremio clients call it cross-origin);
+// the HTML pages don't need it. Baseline security headers on everything.
+const HTML_PAGES = new Set(['/', '/configure', '/privacy', '/stats']);
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  if (!HTML_PAGES.has(req.path)) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  }
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -96,8 +103,10 @@ const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 60);
 const rateLimitStore = new Map();
 
 app.use((req, res, next) => {
-  // Skip rate limiting for static files and health check
-  if (req.path.startsWith('/logo') || req.path === '/health') {
+  // Skip rate limiting for static files, health check and the two reads that
+  // are served from cache anyway (landing page, public stats)
+  if (req.path.startsWith('/logo') || req.path.startsWith('/favicon') ||
+      req.path === '/health' || req.path === '/configure' || req.path === '/api/stats/public') {
     return next();
   }
   
@@ -117,6 +126,9 @@ app.use((req, res, next) => {
   }
 
   if (entry.count >= RATE_LIMIT_MAX) {
+    if (req.path.startsWith('/api/')) {
+      return res.status(429).json({ success: false, error: 'Too many requests' });
+    }
     const baseUrl = getExternalUrl(req);
     const manifestWithLogo = getManifestWithLogo(req);
     res.status(429).send(generateErrorHTML(429, 'Too many requests', baseUrl, manifestWithLogo));
@@ -127,25 +139,43 @@ app.use((req, res, next) => {
   next();
 });
 
+// Periodically drop expired IP buckets so the Map doesn't grow forever
+// (long-running local instances previously leaked memory here).
+function sweepRateLimitStore() {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitStore) {
+    if (now > entry.resetAt) rateLimitStore.delete(ip);
+  }
+}
+const rateLimitSweeperTimer = setInterval(sweepRateLimitStore, RATE_LIMIT_WINDOW_MS);
+rateLimitSweeperTimer.unref(); // don't keep the process alive just for sweeping
+
 // ============================================================================
 // API ENDPOINTS
 // ============================================================================
 
 // Analytics tracking endpoint
+const VALID_LANGUAGE_OPTIONS = new Set(getLanguageOptions());
+const isLanguageOption = (v) => typeof v === 'string' && VALID_LANGUAGE_OPTIONS.has(v);
+const shortString = (v, max) => (typeof v === 'string' ? v.slice(0, max) : undefined);
+
 app.post('/api/track', (req, res) => {
   try {
-    const { event, page, mainLang, transLang, contentType } = req.body;
+    const { event, page, mainLang, transLang, contentType } = req.body || {};
     const ip = getClientIP(req);
     
     switch (event) {
       case 'pageView':
-        trackPageView(ip, page);
+        trackPageView(ip, shortString(page, 32) || 'unknown');
         break;
       case 'install':
-        trackInstall(ip, mainLang, transLang);
-        break;
       case 'subtitleRequest':
-        trackSubtitleRequest(mainLang, transLang, contentType);
+        // Free-form strings here would reach the analytics store (and the stats page)
+        if (!isLanguageOption(mainLang) || !isLanguageOption(transLang)) {
+          return res.status(400).json({ success: false, error: 'Unknown language' });
+        }
+        if (event === 'install') trackInstall(ip, mainLang, transLang);
+        else trackSubtitleRequest(mainLang, transLang, shortString(contentType, 16));
         break;
     }
     
@@ -182,11 +212,25 @@ app.get('/health', (req, res) => {
 
 // Landing/configuration page
 app.get('/', (req, res) => {
-  res.redirect('/configure');
+  res.redirect(301, '/configure');
 });
+
+// The landing HTML only varies with stats, which the page refreshes
+// client-side anyway, so it can be cached in memory and at Vercel's edge.
+// Page views are tracked client-side (/api/track), so caching loses nothing.
+const LANDING_CACHE_TTL_MS = 60 * 1000;
+const landingCache = new Map(); // baseUrl -> { html, at }
 
 app.get('/configure', async (req, res) => {
   const baseUrl = getExternalUrl(req);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600');
+
+  const cached = landingCache.get(baseUrl);
+  if (cached && Date.now() - cached.at < LANDING_CACHE_TTL_MS) {
+    return res.send(cached.html);
+  }
+
   const manifestWithLogo = getManifestWithLogo(req);
   let publicStats;
   try {
@@ -195,7 +239,8 @@ app.get('/configure', async (req, res) => {
     publicStats = { totalSubtitlesServed: 0, totalInstalls: 0, totalPageViews: 0, uniqueVisitors: 0, topPairs: [], live: false };
   }
   const html = generateLandingHTML(manifestWithLogo, baseUrl, publicStats);
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  if (landingCache.size >= 8) landingCache.clear();
+  landingCache.set(baseUrl, { html, at: Date.now() });
   res.send(html);
 });
 
@@ -278,19 +323,19 @@ app.get('/sitemap.xml', (req, res) => {
 // ============================================================================
 
 // Serve cached subtitles (legacy/backup)
-app.get('/subtitles/:filename', (req, res) => {
+app.get('/subtitles/:filename', async (req, res) => {
   const filename = req.params.filename;
   const cacheKey = filename.replace('.srt', '');
-  
-  const content = getSubtitle(cacheKey);
-  
+
+  const content = await getSubtitle(cacheKey);
+
   if (!content) {
     debugServer.warn(`Subtitle not found in cache: ${cacheKey}`);
     return res.status(404).send('Subtitle not found or expired');
   }
-  
+
   trackSubtitleServed();
-  
+
   res.setHeader('Content-Type', 'text/srt; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=21600');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
@@ -310,12 +355,16 @@ app.get('/subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:t
     videoSize: req.query && req.query.videoSize ? req.query.videoSize : undefined,
     videoHash: req.query && req.query.videoHash ? req.query.videoHash : undefined
   };
-  
+
+  // Style code rides in the query (see lib/styleRenderer.js docs).
+  // Website-configured installs don't send it -> undefined -> defaults used.
+  const styleCode = req.query && typeof req.query.style === 'string' ? req.query.style : undefined;
+
   debugServer.log(`Dynamic subtitle request: ${type}/${imdbId} ${mainLang}+${transLang}`);
   
   try {
     const content = await generateDynamicSubtitle(
-      type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId, videoParams
+      type, imdbId, season, episode, mainLang, transLang, mainSubId, transSubId, videoParams, styleCode
     );
     
     if (!content) {
@@ -339,26 +388,83 @@ app.get('/subs/:type/:imdbId/:season/:episode/:mainLang/:transLang/:mainSubId/:t
   }
 });
 
-// Configuration-specific configure page (redirect to main configure)
+// Configuration-specific configure page (redirect to main configure, pre-filled)
+const PREFILL_KEYS = ['mainLang', 'transLang', 'marker', 'mainBold', 'transItalic', 'swapLines'];
+
+// "Configure" on an installed addon lands here: hand the current settings to
+// the landing page so the form opens pre-filled instead of from scratch.
 app.get('/:config/configure', (req, res) => {
-  res.redirect('/configure');
+  const parsed = parseConfigParam(req.params.config);
+  if (!parsed) return res.redirect('/configure');
+  const prefill = {};
+  for (const key of PREFILL_KEYS) {
+    if (typeof parsed[key] === 'string') prefill[key] = parsed[key];
+  }
+  res.redirect('/configure?config=' + encodeURIComponent(JSON.stringify(prefill)));
 });
+
+
+// Sentinel used internally by the config parser.
+const INVALID_CONFIG = Symbol('invalid-config');
+
+function tryDecode(raw) {
+  // Express :params are already decoded; a second decode pass must not
+  // throw on bare '%' characters. Returns '' when it throws.
+  try {
+    return decodeURIComponent(raw);
+  } catch (_) {
+    return '';
+  }
+}
+
+function tryParseJsonConfig(decoded) {
+  if (!decoded || !decoded.trim().startsWith('{')) return INVALID_CONFIG;
+  try {
+    const obj = JSON.parse(decoded);
+    if (obj && typeof obj === 'object' && obj.mainLang && obj.transLang) return obj;
+  } catch (_) {
+    // not JSON (or broken JSON) — fall through
+  }
+  return decoded; // decoded string, maybe pipe form — caller decides
+}
+
+// Parse the config path segment. Two encodings are supported:
+//  1) compact : "English [eng]|Turkish [tur]"  (website-generated URLs)
+//  2) native  : URL-encoded JSON {"mainLang": "...", ...}  (Stremio builds
+//               this when the user configures the addon inside the app)
+// Also tolerates already-decoded input (Express :params arrive decoded).
+// Returns a config object (languages + optional style keys) or null.
+function parseConfigParam(raw) {
+  if (raw == null || raw === '') return null;
+  const rawStr = String(raw);
+
+  // 1) JSON form (encoded or already decoded).
+  const jsonOutcome = tryParseJsonConfig(tryDecode(rawStr));
+  if (jsonOutcome !== INVALID_CONFIG && typeof jsonOutcome === 'object') {
+    return jsonOutcome;
+  }
+
+  // 2) Compact form on the raw string, then on the decoded string.
+  for (const candidate of [rawStr, tryDecode(rawStr)]) {
+    const [mainLang, transLang] = candidate.split('|');
+    if (mainLang && transLang) return { mainLang, transLang };
+  }
+
+  return null;
+}
 
 // Configuration-specific manifest
 app.get('/:config/manifest.json', (req, res) => {
   try {
-    const configParam = decodeURIComponent(req.params.config);
-    const [mainLang, transLang] = configParam.split('|');
-    
-    if (!mainLang || !transLang) {
+    const parsed = parseConfigParam(req.params.config);
+    if (!parsed) {
       return res.status(400).json({ error: 'Invalid configuration' });
     }
 
-    const mainCode = parseLangCode(mainLang);
-    const transCode = parseLangCode(transLang);
+    const mainCode = parseLangCode(parsed.mainLang);
+    const transCode = parseLangCode(parsed.transLang);
     const baseUrl = getExternalUrl(req);
 
-    // Create configured manifest
     const configuredManifest = {
       ...manifest,
       id: `${manifest.id}.${mainCode}.${transCode}`,
@@ -380,23 +486,20 @@ app.get('/:config/manifest.json', (req, res) => {
 // Configuration-specific subtitles handler
 app.get('/:config/subtitles/:type/:id/:extra?.json', async (req, res) => {
   try {
-    const configParam = decodeURIComponent(req.params.config);
-    const [mainLang, transLang] = configParam.split('|');
-    
-    if (!mainLang || !transLang) {
+    const parsed = parseConfigParam(req.params.config);
+    if (!parsed) {
       return res.status(400).json({ subtitles: [] });
     }
 
     const { type, id } = req.params;
     const extra = req.params.extra ? parseExtra(req.params.extra) : {};
 
-    const config = {
-      mainLang,
-      transLang
-    };
+    // parsed carries mainLang/transLang plus any style keys; the handler
+    // reads exactly what it needs and styleRenderer clamps values.
+    const config = parsed;
 
-    trackSubtitleRequest(parseLangCode(mainLang), parseLangCode(transLang), type, id);
-    debugServer.log(`Subtitle request: ${type}/${id}, langs: ${parseLangCode(mainLang)}+${parseLangCode(transLang)}`);
+    trackSubtitleRequest(parseLangCode(parsed.mainLang), parseLangCode(parsed.transLang), type, id);
+    debugServer.log(`Subtitle request: ${type}/${id}, langs: ${parseLangCode(parsed.mainLang)}+${parseLangCode(parsed.transLang)}`);
 
     const result = await subtitlesHandler({ type, id, extra, config });
     
@@ -493,3 +596,4 @@ if (!process.env.VERCEL) {
 
 // Export for Vercel
 module.exports = app;
+module.exports._test = { parseConfigParam, getClientIP, sweepRateLimitStore, rateLimitStore };

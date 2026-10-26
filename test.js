@@ -7,6 +7,9 @@
 
 const assert = require('assert');
 
+// Never bind ports in tests (server.js listens unless VERCEL is set).
+process.env.VERCEL = '1';
+
 const {
   _test: {
     parseTimeToMs,
@@ -34,6 +37,18 @@ let failed = 0;
 function test(name, fn) {
   try {
     fn();
+    passed++;
+    console.log(`  PASS  ${name}`);
+  } catch (err) {
+    failed++;
+    console.error(`  FAIL  ${name}`);
+    console.error(`        ${err.message}`);
+  }
+}
+
+async function testAsync(name, fn) {
+  try {
+    await fn();
     passed++;
     console.log(`  PASS  ${name}`);
   } catch (err) {
@@ -891,12 +906,465 @@ test('alignAndMatch: piecewise-drifted track matches better with local offsets e
 });
 
 // ============================================================================
+// styleRenderer
+// ============================================================================
+console.log('\n--- styleRenderer ---');
+
+const {
+  DEFAULT_STYLE,
+  COLOR_PRESETS,
+  MARKER_OPTIONS,
+  parseStyleCode,
+  buildStyleCode,
+  applyStyle
+} = require('./lib/styleRenderer');
+
+test('applyStyle: legacy defaults are byte-identical to v1 formatting', () => {
+  assert.strictEqual(
+    applyStyle('Hello', 'World'),
+    "<b>Hello</b>\n\u203a <i><font color='#94a3b8'>World</font></i>"
+  );
+});
+
+test('applyStyle: empty trans text renders main line only', () => {
+  assert.strictEqual(applyStyle('Hello', ''), '<b>Hello</b>');
+  assert.strictEqual(applyStyle('Hello', null), '<b>Hello</b>');
+});
+
+test('applyStyle: custom toggles and marker, no bold', () => {
+  // Marker follows the v1 tag order (outside <i>/<font>, same as the
+  // legacy-defaults test); italic toggled off here, bold toggled off.
+  assert.strictEqual(
+    applyStyle('Hi', 'Yo', { mainBold: false, transItalic: false, marker: '::', transColor: '#ff0000' }),
+    "Hi\n:: <font color='#ff0000'>Yo</font>"
+  );
+});
+
+test('applyStyle: swapLines puts secondary line on top', () => {
+  assert.strictEqual(
+    applyStyle('Hi', 'Yo', { swapLines: true }),
+    "\u203a <i><font color='#94a3b8'>Yo</font></i>\n<b>Hi</b>"
+  );
+});
+
+test('applyStyle: mainColor wraps primary line in font tag', () => {
+  assert.strictEqual(
+    applyStyle('Hi', 'Yo', { mainColor: '#00ff00' }),
+    "<font color='#00ff00'><b>Hi</b></font>\n\u203a <i><font color='#94a3b8'>Yo</font></i>"
+  );
+});
+
+test('applyStyle: preset label extracts hex (config value from Stremio)', () => {
+  assert.strictEqual(
+    applyStyle('Hi', 'Yo', { transColor: 'Red (#f43f5e)' }),
+    "<b>Hi</b>\n\u203a <i><font color='#f43f5e'>Yo</font></i>"
+  );
+});
+
+test('applyStyle: invalid color falls back to legacy gray, not raw injection', () => {
+  assert.ok(applyStyle('Hi', 'Yo', { transColor: '<script>' }).includes('#94a3b8'));
+  assert.ok(!applyStyle('Hi', 'Yo', { transColor: '<script>' }).includes('<script>'));
+});
+
+test('applyStyle: no marker renders without prefix', () => {
+  assert.strictEqual(
+    applyStyle('Hi', 'Yo', { marker: 'none', transColor: '', transItalic: false }),
+    "<b>Hi</b>\nYo"
+  );
+});
+
+test('buildStyleCode + parseStyleCode: default config roundtrip', () => {
+  const code = buildStyleCode({});
+  assert.strictEqual(code, 'none|#94a3b8|1|1|\u203a|0');
+  const s = parseStyleCode(code);
+  assert.strictEqual(s.mainColor, '');
+  assert.strictEqual(s.transColor, '#94a3b8');
+  assert.strictEqual(s.mainBold, true);
+  assert.strictEqual(s.transItalic, true);
+  assert.strictEqual(s.marker, '\u203a');
+  assert.strictEqual(s.swapLines, false);
+});
+
+test('buildStyleCode + parseStyleCode: full custom config roundtrip', () => {
+  const code = buildStyleCode({
+    mainColor: '#00ff00', transColor: '#ff0000', mainBold: false,
+    transItalic: false, marker: '::', swapLines: true
+  });
+  assert.strictEqual(code, '#00ff00|#ff0000|0|0|::|1');
+  const s = parseStyleCode(code);
+  assert.strictEqual(s.mainColor, '#00ff00');
+  assert.strictEqual(s.transColor, '#ff0000');
+  assert.strictEqual(s.mainBold, false);
+  assert.strictEqual(s.transItalic, false);
+  assert.strictEqual(s.marker, '::');
+  assert.strictEqual(s.swapLines, true);
+});
+
+test('buildStyleCode: native form checkbox values (on / omitted)', () => {
+  // Stremio's config form serializes via FormData: checked -> 'on', unchecked -> key absent
+  const form = { mainLang: 'English [eng]', transLang: 'Turkish [tur]',
+    mainColor: 'None (player default)', transColor: 'Gray (#94a3b8)', marker: '\u203a' };
+  assert.strictEqual(buildStyleCode({ ...form, mainBold: 'on', transItalic: 'on' }), 'none|#94a3b8|1|1|\u203a|0');
+  assert.strictEqual(buildStyleCode({ ...form, swapLines: 'on' }), 'none|#94a3b8|0|0|\u203a|1');
+  assert.strictEqual(buildStyleCode({ ...form, mainBold: 'checked' }), 'none|#94a3b8|1|0|\u203a|0');
+});
+
+test('buildStyleCode: language-only config keeps defaults', () => {
+  assert.strictEqual(
+    buildStyleCode({ mainLang: 'English [eng]', transLang: 'Turkish [tur]' }),
+    'none|#94a3b8|1|1|\u203a|0'
+  );
+});
+
+test('parseStyleCode: invalid fields fall back to defaults', () => {
+  const s = parseStyleCode('zzz|zzz|9|9|<script>|9');
+  assert.strictEqual(s.transColor, '#94a3b8', 'invalid color -> default gray');
+  assert.strictEqual(s.mainBold, true);
+  assert.strictEqual(s.transItalic, true);
+  assert.strictEqual(s.marker, '\u203a');
+  assert.strictEqual(s.swapLines, false);
+});
+
+test('parseStyleCode: null/empty code returns defaults', () => {
+  const s = parseStyleCode(null);
+  assert.strictEqual(s.transColor, '#94a3b8');
+  assert.strictEqual(s.mainBold, true);
+  const e = parseStyleCode('');
+  assert.strictEqual(e.transColor, '#94a3b8');
+});
+
+test('preset/marker option lists are exposed for the manifest', () => {
+  assert.ok(Array.isArray(COLOR_PRESETS) && COLOR_PRESETS.length >= 6);
+  assert.ok(MARKER_OPTIONS.includes('\u203a') && !MARKER_OPTIONS.includes('|'));
+});
+
+test('applyStyle: null main text is guarded (no literal "null")', () => {
+  assert.strictEqual(applyStyle(null, 'Yo'), "<b></b>\n\u203a <i><font color='#94a3b8'>Yo</font></i>");
+});
+
+test('parseStyleCode: whitespace around fields is ignored', () => {
+  const s = parseStyleCode(' #00ff00 | #ff0000 |1|1| :: | 1 ');
+  assert.strictEqual(s.mainColor, '#00ff00');
+  assert.strictEqual(s.transColor, '#ff0000');
+  assert.strictEqual(s.marker, '::');
+  assert.strictEqual(s.swapLines, true);
+});
+
+// ============================================================================
+// mergeSubtitles + style wiring
+// ============================================================================
+console.log('\n--- mergeSubtitles style wiring ---');
+
+test('mergeSubtitles: default output byte-identical to legacy formatting', () => {
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'one' },
+    { id: '2', startTime: '00:00:03,000', endTime: '00:00:04,000', text: 'two' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'uno' }
+  ];
+  const merged = mergeSubtitles(main, trans, { mainLang: 'eng', transLang: 'tur' });
+  assert.strictEqual(
+    merged[0].text,
+    "<b>one</b>\n\u203a <i><font color='#94a3b8'>uno</font></i>"
+  );
+  assert.strictEqual(merged[1].text, '<b>two</b>');
+});
+
+test('mergeSubtitles: style option changes rendering', () => {
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'one' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'uno' }
+  ];
+  const merged = mergeSubtitles(main, trans, {
+    mainLang: 'eng', transLang: 'tur',
+    style: { mainBold: false, transItalic: false, marker: 'none', transColor: '', swapLines: true }
+  });
+  assert.strictEqual(merged[0].text, 'uno\none');
+});
+
+test('mergeSubtitles: style code string is accepted too', () => {
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'one' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'uno' }
+  ];
+  const merged = mergeSubtitles(main, trans, {
+    mainLang: 'eng', transLang: 'tur',
+    style: 'none|#94a3b8|1|1|\u203a|1'
+  });
+  assert.strictEqual(
+    merged[0].text,
+    "\u203a <i><font color='#94a3b8'>uno</font></i>\n<b>one</b>"
+  );
+});
+
+test('mergeSubtitles: styled unmatched path renders main line only (no swap/undefined artifacts)', () => {
+  const main = [
+    { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'one' }
+  ];
+  const trans = [
+    { id: '1', startTime: '00:00:30,000', endTime: '00:00:31,000', text: 'uno' }
+  ];
+  const merged = mergeSubtitles(main, trans, { mainLang: 'eng', transLang: 'tur' });
+  assert.strictEqual(merged[0].text, '<b>one</b>');
+});
+
+// ============================================================================
+// manifest config
+// ============================================================================
+console.log('\n--- manifest config ---');
+
+test('manifest: version bumped to 1.2.0', () => {
+  assert.strictEqual(manifest.version, '1.2.0');
+});
+
+test('manifest: language + style config keys present', () => {
+  const keys = manifest.config.map(c => c.key);
+  for (const key of ['mainLang', 'transLang', 'mainColor', 'transColor',
+                     'mainBold', 'transItalic', 'marker', 'swapLines']) {
+    assert.ok(keys.includes(key), `missing config key: ${key}`);
+  }
+});
+
+test('manifest: style defaults are safe', () => {
+  const byKey = Object.fromEntries(manifest.config.map(c => [c.key, c]));
+  assert.strictEqual(byKey.mainColor.default, 'None (player default)');
+  assert.strictEqual(byKey.transColor.default, 'Gray (#94a3b8)');
+  // SDK convention: 'checked' = enabled by default, no default = unchecked
+  assert.strictEqual(byKey.mainBold.default, 'checked');
+  assert.strictEqual(byKey.transItalic.default, 'checked');
+  assert.strictEqual(byKey.marker.default, '\u203a');
+  assert.strictEqual(byKey.swapLines.default, undefined);
+  for (const key of ['mainColor', 'transColor', 'marker']) {
+    assert.ok(Array.isArray(byKey[key].options) && byKey[key].options.length > 0,
+      `${key} must offer options`);
+  }
+});
+
+// ============================================================================
+// subtitleCache (tiered) — sync surface
+// ============================================================================
+console.log('\n--- subtitleCache sync ---');
+
+const subtitleCacheMod = require('./lib/subtitleCache');
+
+test('subtitleCache: put/get roundtrip in memory', () => {
+  subtitleCacheMod.clearMem();
+  subtitleCacheMod.put('testkey1', 'A\nB');
+  const entry = subtitleCacheMod._test.memCache.get('testkey1');
+  assert.ok(entry && entry.content === 'A\nB' && typeof entry.timestamp === 'number');
+});
+
+test('subtitleCache: disk tier flag honors env (auto/on/off/Vercel)', () => {
+  const origV = process.env.VERCEL;
+  const origD = process.env.SUBTITLE_DISK_CACHE;
+  delete process.env.VERCEL;
+  delete process.env.SUBTITLE_DISK_CACHE;
+  assert.strictEqual(subtitleCacheMod._test.isDiskEnabled(), true, 'local default on');
+  process.env.VERCEL = '1';
+  assert.strictEqual(subtitleCacheMod._test.isDiskEnabled(), false, 'vercel auto-off');
+  process.env.SUBTITLE_DISK_CACHE = 'on';
+  assert.strictEqual(subtitleCacheMod._test.isDiskEnabled(), true, 'explicit on wins');
+  process.env.SUBTITLE_DISK_CACHE = 'off';
+  assert.strictEqual(subtitleCacheMod._test.isDiskEnabled(), false, 'explicit off wins');
+  if (origV === undefined) delete process.env.VERCEL; else process.env.VERCEL = origV;
+  if (origD === undefined) delete process.env.SUBTITLE_DISK_CACHE; else process.env.SUBTITLE_DISK_CACHE = origD;
+});
+
+test('subtitleCache: put skips redis for content over REDIS_MAX_BYTES (utf8 bytes)', () => {
+  const { REDIS_MAX_BYTES } = subtitleCacheMod._test;
+  assert.strictEqual(typeof REDIS_MAX_BYTES, 'number', 'REDIS_MAX_BYTES exposed for tests');
+  const bigStr = '日'.repeat(200000); // 200k chars, ~600KB utf8
+  assert.ok(Buffer.byteLength(bigStr, 'utf8') > REDIS_MAX_BYTES, 'fixture exceeds cap in bytes');
+  assert.ok(bigStr.length < REDIS_MAX_BYTES, 'fixture is UNDER cap in chars (guard must use bytes)');
+});
+
+// ============================================================================
+// server config parsing (native/JSON + legacy pipe forms)
+// ============================================================================
+console.log('\n--- server config parsing ---');
+
+const serverApp = require('./server');
+const { parseConfigParam } = serverApp._test;
+
+test('parseConfigParam: compact pipe form (website URLs)', () => {
+  assert.deepStrictEqual(
+    parseConfigParam(encodeURIComponent('English [eng]|Turkish [tur]')),
+    { mainLang: 'English [eng]', transLang: 'Turkish [tur]' }
+  );
+  // already-decoded input works too (Express decodes :params)
+  assert.deepStrictEqual(
+    parseConfigParam('English [eng]|Turkish [tur]'),
+    { mainLang: 'English [eng]', transLang: 'Turkish [tur]' }
+  );
+});
+
+test('parseConfigParam: native JSON form (Stremio in-app config)', () => {
+  const cfg = {
+    mainLang: 'English [eng]',
+    transLang: 'Turkish [tur]',
+    mainColor: 'Red (#f43f5e)',
+    mainBold: 'false'
+  };
+  assert.deepStrictEqual(
+    parseConfigParam(encodeURIComponent(JSON.stringify(cfg))),
+    cfg
+  );
+  assert.deepStrictEqual(parseConfigParam(JSON.stringify(cfg)), cfg);
+});
+
+test('parseConfigParam: garbage/invalid returns null', () => {
+  assert.strictEqual(parseConfigParam('plain-garbage-no-pipe'), null);
+  assert.strictEqual(parseConfigParam(''), null);
+  assert.strictEqual(parseConfigParam(undefined), null);
+  assert.strictEqual(parseConfigParam('{broken json'), null);
+  // JSON without both language keys is invalid
+  assert.strictEqual(parseConfigParam(JSON.stringify({ mainLang: 'English [eng]' })), null);
+});
+
+// ============================================================================
 // RESULTS
 // ============================================================================
-console.log('\n========================================');
-console.log(`  Results: ${passed} passed, ${failed} failed`);
-console.log('========================================\n');
+(async () => {
+  // ---------------------------------------------------------------------------
+  // subtitles URL plumbing (style + video params)
+  // ---------------------------------------------------------------------------
+  console.log('\n--- subtitles URL plumbing ---');
 
-if (failed > 0) {
-  process.exit(1);
-}
+  const axiosMod = require('axios');
+  const { subtitlesHandler } = require('./addon');
+  const { parseStyleCode: parseStyleCodeForPlumbing } = require('./lib/styleRenderer');
+
+  await testAsync('subtitlesHandler: .srt URL carries style param and video params', async () => {
+    const origGet = axiosMod.get;
+    axiosMod.get = async () => ({
+      data: {
+        subtitles: [
+          { id: '111', url: 'https://example.com/main.srt', lang: 'eng', downloads: 500 },
+          { id: '222', url: 'https://example.com/trans.srt', lang: 'tur', downloads: 400 }
+        ]
+      }
+    });
+
+    const result = await subtitlesHandler({
+      type: 'movie',
+      id: 'tt0111161',
+      extra: { filename: 'Shawshank.1994.mp4' },
+      config: {
+        mainLang: 'English [eng]',
+        transLang: 'Turkish [tur]',
+        mainColor: 'Red (#f43f5e)',
+        mainBold: 'false'
+      }
+    });
+    axiosMod.get = origGet;
+
+    assert.strictEqual(result.subtitles.length, 1);
+    const url = result.subtitles[0].url;
+    // imdbId: 'tt0111161'.replace('tt','') === '0111161' (first occurrence only)
+    assert.ok(url.startsWith('{{ADDON_URL}}/subs/movie/0111161/0/0/eng/tur/111/222.srt?'), `unexpected path: ${url}`);
+    const params = new URLSearchParams(url.split('?')[1]);
+    assert.ok(params.has('style'), 'style param missing');
+    const styleCfg = parseStyleCodeForPlumbing(params.get('style'));
+    assert.strictEqual(styleCfg.mainColor, '#f43f5e');
+    assert.strictEqual(styleCfg.mainBold, false);
+    assert.strictEqual(params.get('filename'), 'Shawshank.1994.mp4');
+  });
+
+  await testAsync('subtitlesHandler: defaults used when config has only languages', async () => {
+    const origGet = axiosMod.get;
+    axiosMod.get = async () => ({
+      data: { subtitles: [
+        { id: '111', url: 'https://example.com/main.srt', lang: 'eng', downloads: 500 },
+        { id: '222', url: 'https://example.com/trans.srt', lang: 'tur', downloads: 400 }
+      ] }
+    });
+    const result = await subtitlesHandler({
+      type: 'movie', id: 'tt0111161', extra: {},
+      config: { mainLang: 'English [eng]', transLang: 'Turkish [tur]' }
+    });
+    axiosMod.get = origGet;
+    const params = new URLSearchParams(result.subtitles[0].url.split('?')[1]);
+    const styleCfg = parseStyleCodeForPlumbing(params.get('style'));
+    assert.strictEqual(styleCfg.transColor, '#94a3b8');
+    assert.strictEqual(styleCfg.mainBold, true);
+  });
+
+  // ============================================================================
+  // subtitleCache (tiered) — async get/put + disk tier
+  // ============================================================================
+  console.log('\n--- subtitleCache async ---');
+
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+
+  await testAsync('subtitleCache: memory get hit/miss', async () => {
+    subtitleCacheMod.clearMem();
+    assert.strictEqual(await subtitleCacheMod.get('async_missing'), null, 'miss -> null');
+    subtitleCacheMod.put('async_hit', 'mem-content');
+    assert.strictEqual(await subtitleCacheMod.get('async_hit'), 'mem-content');
+  });
+
+  await testAsync('subtitleCache: disk tier write/read/expiry with dir override', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dualsub-cache-'));
+    const origDir = process.env.SUBTITLE_DISK_DIR;
+    const origAuto = process.env.SUBTITLE_DISK_CACHE;
+    process.env.SUBTITLE_DISK_DIR = tmp;
+    process.env.SUBTITLE_DISK_CACHE = 'on';
+
+    // same key -> same sha1-based path
+    const p1 = subtitleCacheMod._test.diskPath('cachecheck');
+    const p2 = subtitleCacheMod._test.diskPath('cachecheck');
+    assert.strictEqual(p1, p2);
+    assert.ok(p1.startsWith(tmp) && p1.endsWith('.srt'), `path shape: ${p1}`);
+
+    subtitleCacheMod.clearMem();
+    subtitleCacheMod.put('cachecheck', 'disk-content');
+    assert.ok(fs.existsSync(p1), 'file written');
+    assert.strictEqual(await subtitleCacheMod.get('cachecheck'), 'disk-content');
+
+    // backdate mtime beyond TTL -> expired & removed
+    const TTL_MS = 6 * 60 * 60 * 1000;
+    const old = new Date(Date.now() - TTL_MS - 1000);
+    fs.utimesSync(p1, old, old);
+    subtitleCacheMod.clearMem();
+    assert.strictEqual(await subtitleCacheMod.get('cachecheck'), null, 'expired on disk');
+    assert.ok(!fs.existsSync(p1), 'expired file removed');
+
+    if (origDir === undefined) delete process.env.SUBTITLE_DISK_DIR; else process.env.SUBTITLE_DISK_DIR = origDir;
+    if (origAuto === undefined) delete process.env.SUBTITLE_DISK_CACHE; else process.env.SUBTITLE_DISK_CACHE = origAuto;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  // ============================================================================
+  // rate limiter sweep
+  // ============================================================================
+  console.log('\n--- rate limiter sweep ---');
+
+  await testAsync('rate limiter: sweepRateLimitStore drops expired entries only', async () => {
+    const { sweepRateLimitStore, rateLimitStore } = serverApp._test;
+    assert.strictEqual(typeof sweepRateLimitStore, 'function', 'sweepRateLimitStore missing');
+    assert.ok(rateLimitStore instanceof Map, 'rateLimitStore Map missing');
+
+    const now = Date.now();
+    rateLimitStore.set('203.0.113.77', { count: 5, resetAt: now - 1000 }); // expired
+    rateLimitStore.set('198.51.100.9', { count: 2, resetAt: now + 60000 }); // active
+    sweepRateLimitStore();
+    assert.ok(!rateLimitStore.has('203.0.113.77'), 'expired entry must be deleted');
+    assert.ok(rateLimitStore.has('198.51.100.9'), 'active entry must survive');
+    rateLimitStore.delete('198.51.100.9');
+  });
+
+  console.log('\n========================================');
+  console.log(`  Results: ${passed} passed, ${failed} failed`);
+  console.log('========================================\n');
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+})();

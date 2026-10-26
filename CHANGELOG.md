@@ -33,6 +33,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Sopranos S02E05 / Shawshank / Game of Thrones S01E01: tied (no regressions)
   - Mean across 8 titles: **+11.2pp**, 5 wins, 3 ties, 0 losses
 
+## [1.2.0] - 2026-10-23
+
+### Added
+
+- Native in-app configuration: language selection and subtitle styling now happen inside Stremio itself, with no external website redirect. The base manifest exposes config fields for primary/secondary languages, line colors, bold/italic, the secondary-line marker, and line order.
+- Custom subtitle styling: primary/secondary line colors, bold/italic toggles, a configurable secondary-line marker, and line-order swap.
+- Tiered subtitle caching: in-memory → Upstash Redis → disk. The disk tier auto-detects the environment (enabled when self-hosting, disabled on Vercel's non-persistent filesystem) and can be controlled via `SUBTITLE_DISK_CACHE` / `SUBTITLE_DISK_DIR`.
+
+### Fixed
+
+- `{{ADDON_URL}}` placeholder not resolved for native-config installs, which produced blank subtitles when configuring in-app.
+- Rate-limit store kept expired IP entries forever (memory leak); expired entries are now swept.
+
+### Changed
+
+- Upstream subtitle requests now reuse keep-alive HTTP agents to reduce connection overhead.
+- Version fields (manifest/package) track 1.2.0.
+
 ## [1.1.0] - 2026-02-04
 
 ### Added

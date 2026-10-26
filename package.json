@@ -1,6 +1,6 @@
 {
   "name": "stremio-dual-subtitles",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Stremio addon for dual subtitles - Learn languages by watching movies with two subtitle languages simultaneously",
   "main": "server.js",
   "scripts": {

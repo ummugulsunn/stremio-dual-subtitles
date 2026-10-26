@@ -7,6 +7,15 @@
 const path = require('path');
 const { addonBuilder } = require('stremio-addon-sdk');
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
+
+// Reuse TLS connections/sockets across OpenSubtitles calls — a measurable
+// cold-start win on serverless, worthwhile locally too.
+const keepAliveHttpAgent = new http.Agent({ keepAlive: true, maxSockets: 32 });
+const keepAliveHttpsAgent = new https.Agent({ keepAlive: true, maxSockets: 32 });
+axios.defaults.httpAgent = keepAliveHttpAgent;
+axios.defaults.httpsAgent = keepAliveHttpsAgent;
 const pako = require('pako');
 const sanitize = require('sanitize-html');
 const { debugServer, sanitizeForLogging } = require('./lib/debug');
@@ -124,6 +133,13 @@ const {
 } = require('./languages');
 const { alignAndMatch } = require('./lib/syncEngine');
 const { generateCandidatePairs } = require('./lib/sourceSelection');
+const {
+  parseStyleCode, applyStyle, buildStyleCode, COLOR_PRESETS, SUB_COLOR_PRESETS, MARKER_OPTIONS
+} = require('./lib/styleRenderer');
+
+// Pre-normalized default style: applyStyle runs once per subtitle cue, so
+// avoid parseStyleCode allocations in the hot path.
+const DEFAULT_STYLE_CLONE = { ...parseStyleCode(null) };
 
 // Optional video-matching parameters (forwarded from Stremio extras).
 // These help OpenSubtitles pick the right release variant for the exact
@@ -168,7 +184,7 @@ const MAX_PAIR_ATTEMPTS = 3;
 
 // Configuration
 const ADDON_NAME = process.env.ADDON_NAME || 'Dual Subtitles';
-const ADDON_VERSION = '1.0.0';
+const ADDON_VERSION = '1.2.0';
 
 
 
@@ -207,6 +223,50 @@ const manifest = {
       options: getLanguageOptions(),
       required: true,
       default: 'Turkish [tur]'
+    },
+    {
+      key: 'mainColor',
+      type: 'select',
+      title: 'Primary Line Color',
+      options: COLOR_PRESETS,
+      required: false,
+      default: 'None (player default)'
+    },
+    {
+      key: 'transColor',
+      type: 'select',
+      title: 'Secondary Line Color',
+      options: SUB_COLOR_PRESETS,
+      required: false,
+      default: 'Gray (#94a3b8)'
+    },
+    {
+      key: 'mainBold',
+      type: 'checkbox',
+      title: 'Bold Primary Line',
+      required: false,
+      default: 'checked'
+    },
+    {
+      key: 'transItalic',
+      type: 'checkbox',
+      title: 'Italic Secondary Line',
+      required: false,
+      default: 'checked'
+    },
+    {
+      key: 'marker',
+      type: 'select',
+      title: 'Secondary Line Marker',
+      options: MARKER_OPTIONS,
+      required: false,
+      default: '\u203a'
+    },
+    {
+      key: 'swapLines',
+      type: 'checkbox',
+      title: 'Show Secondary Line Above Primary',
+      required: false
     }
   ]
 };
@@ -484,9 +544,6 @@ function htmlEncodeSrt(text) {
     .replace(/>/g, '&gt;');
 }
 
-/** Muted color for secondary line; players that ignore <font> still have <b> + › marker. */
-const DUAL_SUB_TRANS_COLOR = '#94a3b8';
-
 /**
  * Merge two subtitle arrays into one, aligning the secondary track to the
  * primary track's timebase before matching.
@@ -508,6 +565,10 @@ const DUAL_SUB_TRANS_COLOR = '#94a3b8';
  *        primary cue (handles cue-boundary mismatches).
  * @param {boolean}     [options.enableOffset=true]
  * @param {boolean}     [options.enableDrift=true]
+ * @param {Object|string|null} [options.style=null]
+ *        Styling config: either a style object or the 6-field code string
+ *        `mainColor|transColor|mainBold|transItalic|marker|swapLines`;
+ *        null/undefined falls back to the legacy default styling.
  */
 function mergeSubtitles(mainSubs, transSubs, options = {}) {
   const opts = typeof options === 'number'
@@ -520,7 +581,8 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
     matchThresholdMs = 1500,
     allowMultiTrans = true,
     enableOffset = true,
-    enableDrift = true
+    enableDrift = true,
+    style = null
   } = opts;
 
   const mainTimed = [];
@@ -551,6 +613,7 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
   const { matches } = alignment;
 
   const transJoiner = isCjkLanguage(transLang) ? '' : ' ';
+  const styleCfg = style == null ? DEFAULT_STYLE_CLONE : parseStyleCode(style);
   const mergedSubs = [];
 
   for (let mi = 0; mi < mainTimed.length; mi++) {
@@ -579,13 +642,12 @@ function mergeSubtitles(mainSubs, transSubs, options = {}) {
         const cleanTransText = transParts.join(transJoiner);
         const encMain = htmlEncodeSrt(cleanMainText);
         const encTrans = htmlEncodeSrt(cleanTransText);
-        mergedText =
-          `<b>${encMain}</b>\n\u203a <i><font color='${DUAL_SUB_TRANS_COLOR}'>${encTrans}</font></i>`;
+        mergedText = applyStyle(encMain, encTrans, styleCfg);
       }
     }
 
     if (mergedText === undefined) {
-      mergedText = `<b>${htmlEncodeSrt(cleanMainText)}</b>`;
+      mergedText = applyStyle(htmlEncodeSrt(cleanMainText), '', styleCfg);
     }
 
     if (!mergedText) continue;
@@ -632,43 +694,22 @@ function formatSrt(subtitleArray) {
   }
 }
 
-// In-memory cache for merged subtitles
-const subtitleCache = new Map();
-const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+// Tiered cache for merged subtitles (memory → Upstash Redis → disk)
+const subtitleCache = require('./lib/subtitleCache');
 
 /**
- * Store subtitle in cache and return data URL.
+ * Store subtitle in the tiered cache and return the key.
  */
 function storeSubtitle(key, srtContent) {
-  // Clean old entries
-  const now = Date.now();
-  for (const [k, v] of subtitleCache.entries()) {
-    if (now - v.timestamp > CACHE_TTL) {
-      subtitleCache.delete(k);
-    }
-  }
-
-  subtitleCache.set(key, {
-    content: srtContent,
-    timestamp: now
-  });
-
+  subtitleCache.put(key, srtContent);
   return key;
 }
 
 /**
- * Get subtitle from cache.
+ * Get subtitle from the tiered cache (async: may hit Redis/disk).
  */
-function getSubtitle(key) {
-  const entry = subtitleCache.get(key);
-  if (!entry) return null;
-  
-  if (Date.now() - entry.timestamp > CACHE_TTL) {
-    subtitleCache.delete(key);
-    return null;
-  }
-  
-  return entry.content;
+async function getSubtitle(key) {
+  return subtitleCache.get(key);
 }
 
 /**
@@ -683,13 +724,14 @@ function getSubtitle(key) {
  * @param {Array} candidatePairs    output of generateCandidatePairs
  * @param {string} mainLang
  * @param {string} transLang
+ * @param {Object|null}   styleCfg - style object forwarded to mergeSubtitles (null = legacy defaults)
  * @returns {Promise<{
  *   merged: Array, mergedSrt: string, matchRate: number,
  *   mainSub: object, transSub: object, attempts: number,
  *   passedGate: boolean
  * } | null>}
  */
-async function selectAndMergeBestPair(candidatePairs, mainLang, transLang) {
+async function selectAndMergeBestPair(candidatePairs, mainLang, transLang, styleCfg = null) {
   if (!Array.isArray(candidatePairs) || candidatePairs.length === 0) return null;
 
   const parsedCache = new Map();
@@ -724,7 +766,7 @@ async function selectAndMergeBestPair(candidatePairs, mainLang, transLang) {
       continue;
     }
 
-    const merged = mergeSubtitles(mainParsed, transParsed, { mainLang, transLang });
+    const merged = mergeSubtitles(mainParsed, transParsed, { mainLang, transLang, style: styleCfg });
     const matchRate = merged && merged.matchRate != null ? merged.matchRate : 0;
     debugServer.log(`  match rate: ${(matchRate * 100).toFixed(1)}%`);
 
@@ -803,6 +845,8 @@ async function subtitlesHandler({ type, id, extra, config }) {
       videoHash: extra?.videoHash
     };
     const videoQuery = serializeVideoParams(videoParams);
+    // Style travels with the .srt URL (same pattern as video params).
+    const styleCode = buildStyleCode(config || {});
 
     // Fetch all subtitles
     debugServer.log('Fetching subtitles from OpenSubtitles...');
@@ -848,9 +892,13 @@ async function subtitlesHandler({ type, id, extra, config }) {
       best.trans.id
     ].join('/');
 
+    const queryParts = [];
+    if (videoQuery) queryParts.push(videoQuery);
+    queryParts.push(`style=${encodeURIComponent(styleCode)}`);
+
     const finalSubtitles = [{
       id: `dual-${best.main.id}-${best.trans.id}`,
-      url: `{{ADDON_URL}}/subs/${dynamicParams}.srt${videoQuery ? `?${videoQuery}` : ''}`,
+      url: `{{ADDON_URL}}/subs/${dynamicParams}.srt?${queryParts.join('&')}`,
       lang: mainLang,
       SubtitlesName:
         `Dual (${mainLang.toUpperCase()}+${transLang.toUpperCase()}) - ` +
@@ -882,6 +930,10 @@ builder.defineSubtitlesHandler(subtitlesHandler);
  * repeat hit on the same Vercel instance skips fetch + parse + merge
  * entirely — even ahead of Vercel's edge cache (which ALSO caches via
  * Cache-Control headers in server.js routes).
+ *
+ * @param {string|null} styleCode - 6-field style code from the .srt URL
+ *        query; null = omitted = legacy defaults. The code is included
+ *        in the cache key.
  */
 async function generateDynamicSubtitle(
   type,
@@ -892,7 +944,8 @@ async function generateDynamicSubtitle(
   transLang,
   mainSubId,
   transSubId,
-  videoParams = {}
+  videoParams = {},
+  styleCode = null
 ) {
   debugServer.log('Dynamic subtitle generation:', { type, imdbId, mainLang, transLang });
 
@@ -900,8 +953,8 @@ async function generateDynamicSubtitle(
   const cacheKey =
     `${imdbId}_${season || ''}_${episode || ''}` +
     `_${mainLang}_${transLang}_${mainSubId}_${transSubId}` +
-    `_${videoCacheFragment || ''}`;
-  const cached = getSubtitle(cacheKey);
+    `_${videoCacheFragment || ''}_${styleCode || ''}`;
+  const cached = await getSubtitle(cacheKey);
   if (cached) {
     debugServer.log(`Cache hit (in-instance): ${cacheKey}`);
     return cached;
@@ -960,7 +1013,12 @@ async function generateDynamicSubtitle(
 
     if (orderedPairs.length === 0) return null;
 
-    const best = await selectAndMergeBestPair(orderedPairs, mainLang, transLang);
+    const best = await selectAndMergeBestPair(
+      orderedPairs,
+      mainLang,
+      transLang,
+      styleCode == null ? null : parseStyleCode(styleCode)
+    );
     if (!best || !best.merged || best.merged.length === 0) {
       debugServer.warn('No usable merged subtitle from any pair');
       return null;
