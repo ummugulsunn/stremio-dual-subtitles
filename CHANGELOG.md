@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Secondary subtitle source fallback: when the primary OpenSubtitles index has no subtitles for the requested main or translation language, automatically query a second mirror (`opensubtitles.stremio.homes`) with broader catalog coverage before returning an empty result. Fallback-only — queried only when the primary source is missing a needed language, so titles that already work see no added latency. Disable via `SECONDARY_SOURCE_ENABLED=false`.
+
 ### Performance
 
 - Halved Vercel Active CPU per dual-subtitle request. The previous flow ran the entire fetch + parse + merge pipeline twice — once in `subtitlesHandler` (whose result was thrown away after extracting a URL) and once in `generateDynamicSubtitle`. `subtitlesHandler` now only fetches the OpenSubtitles list and picks the top-ranked candidate pair via metadata; all heavy work happens once, on demand, when Stremio fetches the `.srt` URL.
