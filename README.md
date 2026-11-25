@@ -517,7 +517,7 @@ A: Open an issue on [GitHub](https://github.com/ummugulsunn/stremio-dual-subtitl
 **Added**
 - Native in-app configuration: language selection and subtitle styling inside Stremio, no external redirect
 - Custom subtitle styling: line colors, bold/italic, secondary-line marker, line-order swap
-- Tiered subtitle caching: in-memory → Upstash Redis → disk (env-aware, configurable)
+- Tiered subtitle caching: in-memory → disk, or Upstash Redis on serverless hosts (env-aware, configurable)
 
 **Fixed**
 - `{{ADDON_URL}}` placeholder not resolved for native-config installs (blank subtitles)
