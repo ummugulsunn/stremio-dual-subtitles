@@ -1,0 +1,17 @@
+# Render blueprint: https://render.com/docs/blueprint-spec
+# New > Blueprint > pick this repo. Node version comes from .nvmrc.
+services:
+  - type: web
+    name: stremio-dual-subtitles
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: ANALYTICS_SECRET
+        sync: false
