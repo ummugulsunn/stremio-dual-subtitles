@@ -1183,6 +1183,21 @@ test('subtitleCache: put skips redis for content over REDIS_MAX_BYTES (utf8 byte
   assert.ok(bigStr.length < REDIS_MAX_BYTES, 'fixture is UNDER cap in chars (guard must use bytes)');
 });
 
+test('persistence: buffered writes collapse into one command per key', () => {
+  const { buildFlushCommands, newPending } = require('./lib/persistence')._test;
+  const batch = newPending();
+  batch.counters.set('stats:totalSubtitlesServed', 500);
+  batch.sortedSets.set('stats:languages', new Map([['eng', 3], ['tur', 2]]));
+  batch.sets.set('stats:uniqueVisitors', new Set(['a', 'b']));
+  assert.deepStrictEqual(buildFlushCommands(batch), [
+    ['INCRBY', 'stats:totalSubtitlesServed', '500'],
+    ['ZINCRBY', 'stats:languages', '3', 'eng'],
+    ['ZINCRBY', 'stats:languages', '2', 'tur'],
+    ['SADD', 'stats:uniqueVisitors', 'a', 'b']
+  ]);
+  assert.deepStrictEqual(buildFlushCommands(newPending()), [], 'nothing buffered, nothing sent');
+});
+
 // ============================================================================
 // server config parsing (native/JSON + legacy pipe forms)
 // ============================================================================
