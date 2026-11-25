@@ -49,7 +49,7 @@ Please use the **Bug report** issue template and include:
 6. What actually happened, with screenshots if possible
 
 Before filing, please verify the backend is up: open
-<https://stremio-dual-subtitles.vercel.app/health> — it should return
+<https://stremio-dual-subtitles.onrender.com/health> — it should return
 `{"status":"ok", ...}`. If it doesn't, mention that in the issue.
 
 ## Requesting Features

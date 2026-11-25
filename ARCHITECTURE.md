@@ -47,7 +47,8 @@ the URL path (see [URL Configuration](#url-configuration)).
 | `lib/analytics.js`    | Opt-in, anonymous usage counters behind `ANALYTICS_SECRET`.                    |
 | `lib/templates.js`    | HTML for `/stats`, `/privacy`, 404/429/500 pages, and generic error pages.     |
 | `public/`             | Static assets (logo, demo screenshot).                                         |
-| `vercel.json`         | Vercel routing config (single serverless function fronting everything).        |
+| `render.yaml`         | Render blueprint for the production instance.                                  |
+| `vercel.json`         | Forwards the legacy `vercel.app` address to the Render instance.               |
 
 ---
 
@@ -190,15 +191,19 @@ See [SECURITY.md](SECURITY.md) for the full disclosure policy.
 
 ## Deployment
 
-### Vercel (production)
+### Render (production)
 
-- A single Vercel serverless function serves every route via `vercel.json`.
-- Function timeout is capped at 10 s on the hobby tier, so every upstream
-  call uses `fetchWithRetry` with an explicit `timeout`.
-- In-memory caches inside the function do not survive cold starts. Treat
-  them as best-effort only.
-- The `master` branch auto-deploys. Preview deployments are created for
-  every PR.
+- One long-running Node process (`npm start`) defined by `render.yaml`.
+- The `master` branch auto-deploys.
+- `EXTERNAL_URL` is set to the Render address so generated subtitle links
+  point straight at Render even when a request arrived through Vercel.
+- The free plan sleeps when idle and restarts lose the in-memory caches.
+
+### Vercel (legacy address)
+
+- Existing installs still call `stremio-dual-subtitles.vercel.app`.
+  `vercel.json` forwards every path to the Render instance, so no function
+  code runs on Vercel.
 
 ### Self-hosted (Node)
 

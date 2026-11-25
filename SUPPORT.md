@@ -31,10 +31,10 @@ actionable bugs and feature requests so they stay easy to triage.
 Please take 30 seconds to check:
 
 1. The backend is up: visit
-   [`/health`](https://stremio-dual-subtitles.vercel.app/health). It should
+   [`/health`](https://stremio-dual-subtitles.onrender.com/health). It should
    return `{"status":"ok", ...}`.
 2. You are on the latest version. Reinstall the addon from the
-   [configure page](https://stremio-dual-subtitles.vercel.app/configure)
+   [configure page](https://stremio-dual-subtitles.onrender.com/configure)
    if in doubt.
 3. Your chosen content has subtitles for **both** languages on
    OpenSubtitles. If only one language is available, no dual track will
