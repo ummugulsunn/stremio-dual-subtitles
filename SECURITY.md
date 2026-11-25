@@ -43,7 +43,7 @@ The following are in scope:
   `encoding.js`, `languages.js`, `landingTemplate.js`).
 - The `/api/*`, `/subs/*`, `/subtitles/*`, `/stats`, and `/health`
   endpoints on the official deployment
-  (`stremio-dual-subtitles.vercel.app`).
+  (`stremio-dual-subtitles.onrender.com`).
 - Any official deployment that is linked from this repository's README.
 
 The following are **out of scope**:

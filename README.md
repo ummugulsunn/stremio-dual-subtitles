@@ -2,10 +2,15 @@
 
 A Stremio addon that displays **two subtitle languages simultaneously** - designed for language learners who want to watch movies and TV series with bilingual subtitles.
 
-[![Live Demo](https://img.shields.io/badge/Live-Demo-7c3aed)](https://stremio-dual-subtitles.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-7c3aed)](https://stremio-dual-subtitles.onrender.com)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Stremio](https://img.shields.io/badge/Stremio-Addon-purple.svg)](https://www.stremio.com/)
+
+> **Address change (November 2026):** the hosted addon moved to
+> **<https://stremio-dual-subtitles.onrender.com>**. If you installed it from the old
+> `stremio-dual-subtitles.vercel.app` address and subtitles stopped appearing, remove
+> the addon in Stremio and install it again from the new address.
 
 ---
 
@@ -37,7 +42,7 @@ A Stremio addon that displays **two subtitle languages simultaneously** - design
 
 *Primary language on top in bold, secondary below with a marker and (where the player supports SRT styling) italic and a softer color. Actual appearance depends on the Stremio client.*
 
-**Live Instance:** [stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)
+**Live Instance:** [stremio-dual-subtitles.onrender.com](https://stremio-dual-subtitles.onrender.com)
 
 ---
 
@@ -63,7 +68,7 @@ A Stremio addon that displays **two subtitle languages simultaneously** - design
 
 The fastest way to get started - no installation required.
 
-1. Open your browser and visit **[stremio-dual-subtitles.vercel.app](https://stremio-dual-subtitles.vercel.app)**
+1. Open your browser and visit **[stremio-dual-subtitles.onrender.com](https://stremio-dual-subtitles.onrender.com)**
 2. Select your **Primary Language** (the language you're learning)
 3. Select your **Secondary Language** (your native language)
 4. Click **"Install to Stremio"**
@@ -109,26 +114,19 @@ Local: http://localhost:7000/configure
 Network: http://<your-ip>:7000/configure
 ```
 
-### Option 3: Deploy to Vercel
+### Option 3: Deploy to Render
 
-Deploy your own cloud instance for free.
+Deploy your own cloud instance on Render's free plan. The repository ships a
+`render.yaml` blueprint, so no settings need to be typed in.
 
-**One-Click Deploy:**
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ummugulsunn/stremio-dual-subtitles)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ummugulsunn/stremio-dual-subtitles)
+Any other Node host works too (`npm ci --omit=dev`, then `npm start`); a
+`Dockerfile` and a `Procfile` are included.
 
-**Manual Deploy:**
-
-```bash
-# Install Vercel CLI
-npm install -g vercel
-
-# Login to Vercel
-vercel login
-
-# Deploy
-vercel --prod
-```
+> The addon can exhaust Vercel's free tier once it has real traffic, so the
+> `vercel.json` in this repository no longer runs the addon there. It only
+> forwards the old `vercel.app` address to the Render instance.
 
 ### Option 4: Docker (Coming Soon)
 
@@ -294,7 +292,9 @@ stremio-dual-subtitles/
 │   └── workflows/
 │       └── ci.yml        # GitHub Actions CI/CD
 │
-├── vercel.json           # Vercel deployment config
+├── render.yaml           # Render deployment blueprint
+├── Dockerfile            # Container image for other hosts
+├── vercel.json           # Forwards the old vercel.app address to Render
 ├── package.json          # Dependencies and scripts
 ├── .env.example          # Environment template
 ├── CHANGELOG.md          # Version history
@@ -379,13 +379,13 @@ The addon uses a time-based matching algorithm:
 
 ```bash
 # Health check
-curl https://stremio-dual-subtitles.vercel.app/health
+curl https://stremio-dual-subtitles.onrender.com/health
 
 # Get manifest
-curl https://stremio-dual-subtitles.vercel.app/manifest.json
+curl https://stremio-dual-subtitles.onrender.com/manifest.json
 
 # Get subtitles for a movie (English + Turkish)
-curl "https://stremio-dual-subtitles.vercel.app/English%20%5Beng%5D%7CTurkish%20%5Btur%5D/subtitles/movie/tt0111161.json"
+curl "https://stremio-dual-subtitles.onrender.com/English%20%5Beng%5D%7CTurkish%20%5Btur%5D/subtitles/movie/tt0111161.json"
 ```
 
 ---
@@ -505,8 +505,8 @@ A: Open an issue on [GitHub](https://github.com/ummugulsunn/stremio-dual-subtitl
 
 - Requires internet connection for subtitle fetching
 - Dependent on OpenSubtitles availability
-- Serverless (Vercel) has 10-second timeout limit
-- In-memory cache doesn't persist across serverless invocations
+- Free hosting plans sleep when idle, so the first request after a quiet period is slow
+- In-memory cache doesn't survive a restart (set the Upstash variables for a persistent one)
 
 ---
 
