@@ -1,0 +1,8 @@
+node_modules
+.git
+.github
+.env
+.cache
+test.js
+test_dual.js
+*.md
